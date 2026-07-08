@@ -117,7 +117,15 @@ func DetectProxyProtocol(proxyConfig string) string {
 
 func SupportedKernelsForProtocol(protocol string, proxyConfig string, proxies []config.BrowserProxy, proxyId string) []string {
 	switch strings.ToLower(strings.TrimSpace(protocol)) {
-	case "direct", "http", "https", "socks5":
+	case "direct":
+		return []string{ProxyKernelNative}
+	case "http", "https", "socks5":
+		// 带账号密码鉴权的 socks5/http 代理：Chromium 的 --proxy-server 无法携带凭据，
+		// 浏览器 native 会静默丢弃鉴权信息导致连接失败。这类代理必须通过 xray / mihomo
+		// 桥接成本地无鉴权 socks5 再交给浏览器。无鉴权的代理仍走 native。
+		if RequiresLocalProxyBridgeForBrowser(proxyConfig) {
+			return []string{ProxyKernelXray, ProxyKernelMihomo}
+		}
 		return []string{ProxyKernelNative}
 	case "vmess", "vless", "trojan", "ss", "shadowsocks", "chain+socks5":
 		return []string{ProxyKernelXray, ProxyKernelMihomo}

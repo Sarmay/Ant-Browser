@@ -17,6 +17,9 @@ func TestResolveProxyKernelDefaultPriority(t *testing.T) {
 		{name: "anytls URI uses sing-box", proxy: "anytls://pass@example.com:443?sni=example.com", wantKernel: ProxyKernelSingBox},
 		{name: "mieru uses mihomo", proxy: mieruClashNode, wantKernel: ProxyKernelMihomo},
 		{name: "http uses native", proxy: "http://127.0.0.1:8080", wantKernel: ProxyKernelNative},
+		{name: "socks5 without auth uses native", proxy: "socks5://127.0.0.1:1080", wantKernel: ProxyKernelNative},
+		{name: "socks5 with auth uses xray", proxy: "socks5://user:pass@127.0.0.1:1080", wantKernel: ProxyKernelXray},
+		{name: "http with auth uses xray", proxy: "http://user:pass@127.0.0.1:8080", wantKernel: ProxyKernelXray},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
