@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { FolderOpen, Layers } from 'lucide-react'
+import { FolderOpen, Layers, ShieldCheck } from 'lucide-react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Textarea, toast } from '../../../shared/components'
-import type { BrowserCore, BrowserProfileInput, BrowserProxy, BrowserGroup, ProxyLocationResolveResult } from '../types'
-import { browserProxyResolveLocation, createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, openUserDataDir, updateBrowserProfile, validateProxyConfig } from '../api'
+import type { BrowserCore, BrowserFingerprintCheckResult, BrowserProfileInput, BrowserProxy, BrowserGroup, ProxyLocationResolveResult } from '../types'
+import { browserProxyResolveLocation, checkBrowserProfileFingerprint, createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, openBrowserFingerprintCheck, openUserDataDir, updateBrowserProfile, validateProxyConfig } from '../api'
 import { FingerprintPanel } from '../components/FingerprintPanel'
-import { applyLocaleToFingerprintArgs } from '../utils/fingerprintSerializer'
+import { applyLocaleToFingerprintArgs, validateFingerprintArgs } from '../utils/fingerprintSerializer'
 import { TagInput } from '../components/TagInput'
 import { GroupSelector } from '../components/GroupSelector'
 import { ProxyPickerModal } from '../components/ProxyPickerModal'
@@ -13,6 +13,7 @@ import { ProxyPickerModal } from '../components/ProxyPickerModal'
 const fallbackLowLaunchArgs = ['--disable-sync', '--no-first-run']
 const directProxyID = '__direct__'
 type ProxySourceMode = 'pool' | 'local'
+type BrowserProfileEditForm = BrowserProfileInput & { lastLaunchArgs?: string[] }
 
 function normalizeLaunchArgs(args: string[]): string[] {
   return (args || []).map(item => item.trim()).filter(Boolean)
@@ -21,6 +22,45 @@ function normalizeLaunchArgs(args: string[]): string[] {
 function resolveDefaultLaunchArgs(args: string[]): string[] {
   const normalized = normalizeLaunchArgs(args)
   return normalized.length > 0 ? normalized : fallbackLowLaunchArgs
+}
+
+function joinValues(values?: string[]): string {
+  return values?.length ? values.join(', ') : '-'
+}
+
+function displayValue(value: unknown): string {
+  if (value === undefined || value === null || value === '') return '-'
+  if (Array.isArray(value)) return joinValues(value)
+  return String(value)
+}
+
+function matchStatus(expected: unknown, actual: unknown, mode: 'exact' | 'contains' = 'exact'): 'match' | 'mismatch' | 'unknown' {
+  if (expected === undefined || expected === null || expected === '') return 'unknown'
+  if (Array.isArray(actual)) {
+    const expectedItems = String(expected).split(',').map(item => item.trim()).filter(Boolean)
+    const actualItems = actual.map(item => String(item).trim()).filter(Boolean)
+    return expectedItems.length > 0 && expectedItems.every((item, index) => actualItems[index] === item) ? 'match' : 'mismatch'
+  }
+  if (mode === 'contains') return String(actual).includes(String(expected)) ? 'match' : 'mismatch'
+  return String(expected) === String(actual) ? 'match' : 'mismatch'
+}
+
+function FingerprintCheckRow({ label, expected, actual, mode }: { label: string; expected?: unknown; actual: unknown; mode?: 'exact' | 'contains' }) {
+  const status = matchStatus(expected, actual, mode)
+  const statusText = status === 'match' ? '一致' : status === 'mismatch' ? '不一致' : '仅展示'
+  const statusClass = status === 'match'
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : status === 'mismatch'
+      ? 'bg-amber-50 text-amber-700 border-amber-200'
+      : 'bg-slate-50 text-slate-600 border-slate-200'
+  return (
+    <div className="grid grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)_70px] gap-3 items-start py-2 border-b border-[var(--color-border)] last:border-b-0 text-sm">
+      <div className="text-[var(--color-text-muted)]">{label}</div>
+      <div className="font-mono text-xs break-all text-[var(--color-text-secondary)]">{displayValue(expected)}</div>
+      <div className="font-mono text-xs break-all text-[var(--color-text-primary)]">{displayValue(actual)}</div>
+      <div><span className={`inline-flex px-2 py-0.5 rounded border text-xs ${statusClass}`}>{statusText}</span></div>
+    </div>
+  )
 }
 
 function resolvePoolProxySelection(
@@ -54,7 +94,7 @@ export function BrowserEditPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const isCreate = id === 'new'
-  const [formData, setFormData] = useState<BrowserProfileInput>({
+  const [formData, setFormData] = useState<BrowserProfileEditForm>({
     profileName: '',
     userDataDir: '',
     coreId: '',
@@ -62,6 +102,7 @@ export function BrowserEditPage() {
     proxyId: directProxyID,
     proxyConfig: '',
     launchArgs: [],
+    lastLaunchArgs: [],
     tags: [],
     keywords: [],
     groupId: '',
@@ -79,6 +120,10 @@ export function BrowserEditPage() {
   const [saveError, setSaveError] = useState('')
   const [locationResolving, setLocationResolving] = useState(false)
   const [locationResult, setLocationResult] = useState<ProxyLocationResolveResult | null>(null)
+  const [fingerprintChecking, setFingerprintChecking] = useState(false)
+  const [fingerprintPageOpening, setFingerprintPageOpening] = useState(false)
+  const [fingerprintCheckResult, setFingerprintCheckResult] = useState<BrowserFingerprintCheckResult | null>(null)
+  const [fingerprintCheckOpen, setFingerprintCheckOpen] = useState(false)
 
   useEffect(() => {
     const loadData = async () => {
@@ -119,6 +164,7 @@ export function BrowserEditPage() {
         proxyId: resolvedProxy.proxyId,
         proxyConfig: resolvedProxy.proxyConfig,
         launchArgs: currentLaunchArgs,
+        lastLaunchArgs: current.lastLaunchArgs || [],
         tags: current.tags,
         keywords: current.keywords || [],
         groupId: current.groupId || '',
@@ -164,10 +210,21 @@ export function BrowserEditPage() {
     }
 
     const payload: BrowserProfileInput = {
-      ...formData,
+      profileName: formData.profileName,
+      userDataDir: formData.userDataDir,
+      coreId: formData.coreId,
+      fingerprintArgs: formData.fingerprintArgs,
+      tags: formData.tags,
+      keywords: formData.keywords,
+      groupId: formData.groupId,
       proxyId: resolvedProxyId,
       proxyConfig: resolvedProxyConfig,
       launchArgs: normalizeLaunchArgs(launchArgsText.split('\n')),
+    }
+    const fingerprintValidation = validateFingerprintArgs(payload.fingerprintArgs)
+    if (!fingerprintValidation.valid) {
+      setSaveError(fingerprintValidation.issues.filter(issue => issue.level === 'error').map(issue => issue.message).join('\n'))
+      return
     }
     if (proxyMode === 'pool' && !resolvedProxyId) {
       payload.proxyId = directProxyID
@@ -222,6 +279,46 @@ export function BrowserEditPage() {
       toast.error((error as Error)?.message || '代理定位失败')
     } finally {
       setLocationResolving(false)
+    }
+  }
+
+  const handleFingerprintCheck = async () => {
+    if (isCreate || !id) {
+      toast.warning('请先保存实例，再启动后自测')
+      return
+    }
+    setFingerprintChecking(true)
+    try {
+      const result = await checkBrowserProfileFingerprint(id)
+      setFingerprintCheckResult(result)
+      setFingerprintCheckOpen(true)
+    } catch (error: unknown) {
+      toast.error((error as Error)?.message || '指纹自测失败')
+    } finally {
+      setFingerprintChecking(false)
+    }
+  }
+
+  const handleOpenFingerprintPage = async () => {
+    if (isCreate || !id) {
+      toast.warning('请先保存实例，再打开检测页')
+      return
+    }
+    if (isDirty) {
+      toast.warning('当前有未保存修改，请先保存后再检测')
+      return
+    }
+    setFingerprintPageOpening(true)
+    try {
+      const profile = await openBrowserFingerprintCheck(id)
+      if (profile?.lastLaunchArgs) {
+        setFormData(prev => ({ ...prev, lastLaunchArgs: profile.lastLaunchArgs || [] }))
+      }
+      toast.success('已在目标浏览器打开指纹检测页')
+    } catch (error: unknown) {
+      toast.error((error as Error)?.message || '打开指纹检测页失败')
+    } finally {
+      setFingerprintPageOpening(false)
     }
   }
 
@@ -397,6 +494,27 @@ export function BrowserEditPage() {
       />
 
       <Card title="指纹配置" subtitle="配置浏览器指纹参数">
+        <div className="flex justify-end gap-2 mb-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleOpenFingerprintPage}
+            loading={fingerprintPageOpening}
+            disabled={isCreate}
+          >
+            浏览器内检测
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleFingerprintCheck}
+            loading={fingerprintChecking}
+            disabled={isCreate}
+          >
+            <ShieldCheck className="w-4 h-4" />
+            自测当前实例
+          </Button>
+        </div>
         <FingerprintPanel
           value={formData.fingerprintArgs}
           onChange={args => handleChange('fingerprintArgs', args)}
@@ -414,6 +532,17 @@ export function BrowserEditPage() {
           {isCreate && (
             <p className="text-xs text-[var(--color-text-muted)]">这里默认就是轻量参数模板；需要更复杂的参数，直接在此基础上修改。</p>
           )}
+          {!isCreate && formData.lastLaunchArgs && formData.lastLaunchArgs.length > 0 && (
+            <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
+              <div className="px-3 py-2 text-xs font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)]">上次实际启动参数</div>
+              <Textarea
+                value={formData.lastLaunchArgs.join('\n')}
+                readOnly
+                rows={6}
+                className="border-0 rounded-none bg-[var(--color-bg-hover)] font-mono text-xs"
+              />
+            </div>
+          )}
         </div>
       </Card>
 
@@ -427,6 +556,49 @@ export function BrowserEditPage() {
         cancelText="继续编辑"
         danger
       />
+
+      <Modal
+        open={fingerprintCheckOpen}
+        onClose={() => setFingerprintCheckOpen(false)}
+        title="指纹自测结果"
+        width="860px"
+      >
+        {fingerprintCheckResult ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-[120px_minmax(0,1fr)_minmax(0,1fr)_70px] gap-3 text-xs font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)] pb-2">
+              <div>项目</div>
+              <div>配置值</div>
+              <div>实际值</div>
+              <div>状态</div>
+            </div>
+            <div>
+              <FingerprintCheckRow label="语言" expected={fingerprintCheckResult.expected.language} actual={fingerprintCheckResult.runtime.language} />
+              <FingerprintCheckRow label="语言列表" expected={fingerprintCheckResult.expected.acceptLanguage} actual={fingerprintCheckResult.runtime.languages} />
+              <FingerprintCheckRow label="时区" expected={fingerprintCheckResult.expected.timezone} actual={fingerprintCheckResult.runtime.timezone} />
+              <FingerprintCheckRow label="CPU 核心" expected={fingerprintCheckResult.expected.hardwareConcurrency} actual={fingerprintCheckResult.runtime.hardwareConcurrency} />
+              <FingerprintCheckRow label="窗口大小" expected={fingerprintCheckResult.expected.windowSize} actual={`${fingerprintCheckResult.runtime.innerWidth},${fingerprintCheckResult.runtime.innerHeight}`} />
+              <FingerprintCheckRow label="平台" expected={fingerprintCheckResult.expected.platform} actual={fingerprintCheckResult.runtime.platform} />
+              <FingerprintCheckRow label="品牌版本" expected={fingerprintCheckResult.expected.brandVersion} actual={fingerprintCheckResult.runtime.userAgent} mode="contains" />
+              <FingerprintCheckRow label="系统版本" expected={fingerprintCheckResult.expected.platformVersion} actual={fingerprintCheckResult.runtime.userAgent} mode="contains" />
+              <FingerprintCheckRow label="UA" expected={fingerprintCheckResult.expected.brand} actual={fingerprintCheckResult.runtime.userAgent} mode="contains" />
+              <FingerprintCheckRow label="UA Data" actual={fingerprintCheckResult.runtime.userAgentData} />
+              <FingerprintCheckRow label="Webdriver" expected={false} actual={fingerprintCheckResult.runtime.webdriver} />
+              <FingerprintCheckRow label="内存" actual={fingerprintCheckResult.runtime.deviceMemory} />
+              <FingerprintCheckRow label="屏幕" actual={`${fingerprintCheckResult.runtime.screenWidth}x${fingerprintCheckResult.runtime.screenHeight} depth ${fingerprintCheckResult.runtime.colorDepth} @ ${fingerprintCheckResult.runtime.devicePixelRatio}`} />
+              <FingerprintCheckRow label="WebGL" actual={[fingerprintCheckResult.runtime.webglVendor, fingerprintCheckResult.runtime.webglRenderer].filter(Boolean).join(' / ')} />
+              <FingerprintCheckRow label="Canvas Hash" actual={fingerprintCheckResult.runtime.canvasHash} />
+              <FingerprintCheckRow label="Audio Hash" actual={fingerprintCheckResult.runtime.audioHash} />
+              <FingerprintCheckRow label="ClientRects Hash" actual={fingerprintCheckResult.runtime.clientRectsHash} />
+              <FingerprintCheckRow label="插件" actual={fingerprintCheckResult.runtime.plugins} />
+              <FingerprintCheckRow label="种子" actual={fingerprintCheckResult.expected.seed || '未显式设置'} />
+              <FingerprintCheckRow label="排除伪装" actual={fingerprintCheckResult.expected.disableSpoofing || '无'} />
+              <FingerprintCheckRow label="WebRTC" actual={fingerprintCheckResult.expected.webrtcPolicy || '未显式设置'} />
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-[var(--color-text-muted)]">暂无自测结果</div>
+        )}
+      </Modal>
 
       <Modal
         open={!!saveError}

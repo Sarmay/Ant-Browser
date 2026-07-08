@@ -21,6 +21,7 @@ type Profile struct {
 	ProxyBindName      string   `json:"proxyBindName"`
 	ProxyBindUpdatedAt string   `json:"proxyBindUpdatedAt"`
 	LaunchArgs         []string `json:"launchArgs"`
+	LastLaunchArgs     []string `json:"lastLaunchArgs"`
 	Tags               []string `json:"tags"`
 	Keywords           []string `json:"keywords"`
 	GroupId            string   `json:"groupId"` // 所属分组ID

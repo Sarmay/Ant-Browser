@@ -162,6 +162,10 @@ export function BrowserCoreImportLocal() {
   return window['go']['main']['App']['BrowserCoreImportLocal']();
 }
 
+export function BrowserCoreImportLocalDirectory() {
+  return window['go']['main']['App']['BrowserCoreImportLocalDirectory']();
+}
+
 export function BrowserCoreList() {
   return window['go']['main']['App']['BrowserCoreList']();
 }
@@ -254,6 +258,10 @@ export function BrowserInstanceGetTabs(arg1) {
   return window['go']['main']['App']['BrowserInstanceGetTabs'](arg1);
 }
 
+export function BrowserInstanceOpenFingerprintCheck(arg1) {
+  return window['go']['main']['App']['BrowserInstanceOpenFingerprintCheck'](arg1);
+}
+
 export function BrowserInstanceOpenUrl(arg1, arg2) {
   return window['go']['main']['App']['BrowserInstanceOpenUrl'](arg1, arg2);
 }
@@ -320,6 +328,10 @@ export function BrowserProfileExtensionGet(arg1) {
 
 export function BrowserProfileExtensionSave(arg1, arg2, arg3) {
   return window['go']['main']['App']['BrowserProfileExtensionSave'](arg1, arg2, arg3);
+}
+
+export function BrowserProfileFingerprintCheck(arg1) {
+  return window['go']['main']['App']['BrowserProfileFingerprintCheck'](arg1);
 }
 
 export function BrowserProfileGetCode(arg1) {

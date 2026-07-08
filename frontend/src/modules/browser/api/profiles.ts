@@ -2,6 +2,7 @@ import { applyBrowserProfileCopyOptionsToArgs, createBrowserProfileCopyOptions }
 import { buildBrowserProfileCopyName } from '../copyName'
 import type {
   BrowserProfile,
+  BrowserFingerprintCheckResult,
   BrowserProfileCopyOptions,
   BrowserProfileInput,
   BrowserProfilePackageExportResult,
@@ -15,6 +16,57 @@ export async function fetchBrowserProfiles(): Promise<BrowserProfile[]> {
     return (await bindings.BrowserProfileList()) || []
   }
   return getMockProfiles().filter((profile) => !profile.deletedAt)
+}
+
+export async function checkBrowserProfileFingerprint(profileId: string): Promise<BrowserFingerprintCheckResult> {
+  const bindings: any = await getBindings()
+  if (bindings?.BrowserProfileFingerprintCheck) {
+    return await bindings.BrowserProfileFingerprintCheck(profileId)
+  }
+  const profile = getMockProfiles().find(item => item.profileId === profileId)
+  if (!profile?.running || !profile?.debugReady) {
+    throw new Error('实例未处于可自测状态，请先启动实例并等待调试端口就绪')
+  }
+  return {
+    profileId,
+    expected: {
+      language: '',
+      acceptLanguage: '',
+      timezone: '',
+      hardwareConcurrency: '',
+      windowSize: '',
+      brand: '',
+      brandVersion: '',
+      platform: '',
+      platformVersion: '',
+      seed: '',
+      disableSpoofing: '',
+      webrtcPolicy: '',
+    },
+    runtime: {
+      language: navigator.language || '',
+      languages: Array.from(navigator.languages || []),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+      hardwareConcurrency: navigator.hardwareConcurrency || 0,
+      deviceMemory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory || 0,
+      platform: navigator.platform || '',
+      userAgent: navigator.userAgent || '',
+      userAgentData: '',
+      webdriver: navigator.webdriver === true,
+      screenWidth: window.screen.width || 0,
+      screenHeight: window.screen.height || 0,
+      colorDepth: window.screen.colorDepth || 0,
+      innerWidth: window.innerWidth || 0,
+      innerHeight: window.innerHeight || 0,
+      devicePixelRatio: window.devicePixelRatio || 0,
+      webglVendor: '',
+      webglRenderer: '',
+      canvasHash: '',
+      audioHash: '',
+      clientRectsHash: '',
+      plugins: Array.from(navigator.plugins || []).map(plugin => plugin.name || ''),
+    },
+  }
 }
 
 export async function fetchBrowserProfileTrash(): Promise<BrowserProfile[]> {

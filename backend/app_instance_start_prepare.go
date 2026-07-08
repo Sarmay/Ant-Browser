@@ -137,9 +137,10 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 	totalReadyTimeout := time.Duration(maxStartAttempts) * startReadyTimeout
 	restoreLastSession := browserRestoreLastSession(a.config)
 	extensionDirs := a.browserMgr.EnabledExtensionDirsForProfile(input.ProfileID)
-	defaultStartURLs := mergeStartURLs(browserDefaultStartURLs(a.config), bookmarkStartURLs(bookmarks))
+	defaultStartURLs := a.resolveFingerprintCheckStartURLs(input.ProfileID, mergeStartURLs(browserDefaultStartURLs(a.config), bookmarkStartURLs(bookmarks)))
+	startURLs := a.resolveFingerprintCheckStartURLs(input.ProfileID, input.StartURLs)
 	launchTargets, deferredStartTargets := buildBrowserLaunchTargets(
-		input.StartURLs,
+		startURLs,
 		defaultStartURLs,
 		input.SkipDefaultStartURLs,
 		restoreLastSession,
@@ -217,8 +218,12 @@ func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *Brow
 	if err := browser.EnsureDefaultBookmarks(userDataDir, bookmarks); err != nil {
 		log.Error("默认书签写入失败", logger.F("error", err.Error()))
 	}
+	if err := writeBrowserLanguagePreferences(userDataDir, normalizeBrowserLanguageArgs(profile.FingerprintArgs)); err != nil {
+		log.Error("浏览器语言偏好写入失败", logger.F("profile_id", input.ProfileID), logger.F("error", err.Error()))
+	}
 
 	if detection, ok := detectBrowserRuntimeByActivePort(userDataDir); ok && detection.DebugReady {
+		a.markProfileLastLaunchArgsLocked(profile, nil)
 		a.markProfileRunningLocked(input.ProfileID, profile, nil, detection.PID, detection.DebugPort, true, "")
 		log.Warn("检测到同一用户数据目录已有浏览器运行，已接管为当前实例状态",
 			logger.F("profile_id", input.ProfileID),
@@ -279,22 +284,8 @@ func buildBrowserLaunchArgs(profile *BrowserProfile, userDataDir string, debugPo
 		"--disable-session-crashed-bubble",
 	}
 
-	hasFingerprint := false
-	for _, arg := range profile.FingerprintArgs {
-		if strings.HasPrefix(arg, "--fingerprint=") {
-			hasFingerprint = true
-			break
-		}
-	}
-	if !hasFingerprint {
-		seed := 0
-		for _, char := range profile.ProfileId {
-			seed = (seed << 5) - seed + int(char)
-		}
-		if seed < 0 {
-			seed = -seed
-		}
-		args = append(args, fmt.Sprintf("--fingerprint=%d", seed))
+	if !browserArgsHaveFingerprintSeed(profile.FingerprintArgs) {
+		args = append(args, fmt.Sprintf("--fingerprint=%d", browserFingerprintSeedForProfileID(profile.ProfileId)))
 	}
 
 	if effectiveProxy == "direct://" {
@@ -308,7 +299,7 @@ func buildBrowserLaunchArgs(profile *BrowserProfile, userDataDir string, debugPo
 		args = append(args, fmt.Sprintf("--load-extension=%s", extensionArg))
 	}
 
-	args = append(args, profile.FingerprintArgs...)
+	args = append(args, normalizeBrowserLanguageArgs(profile.FingerprintArgs)...)
 	args = append(args, sanitizedProfileLaunchArgs...)
 	args = append(args, sanitizedExtraLaunchArgs...)
 	return browser.BuildLaunchArgs(args, launchTargets)

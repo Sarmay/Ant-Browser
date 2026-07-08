@@ -1,0 +1,63 @@
+package backend
+
+import (
+	"ant-chrome/backend/internal/browser"
+	"ant-chrome/backend/internal/config"
+	"strings"
+	"testing"
+)
+
+func TestBookmarkListIncludesFingerprintCheck(t *testing.T) {
+	app := NewApp(t.TempDir())
+	app.config = &config.Config{}
+	app.browserMgr = browser.NewManager(app.config, app.appRoot)
+	list := app.BookmarkList()
+	if len(list) == 0 || list[0].URL != fingerprintCheckBookmarkURL {
+		t.Fatalf("first bookmark = %#v, want fingerprint check", list)
+	}
+}
+
+func TestBookmarkSavePreservesFingerprintCheck(t *testing.T) {
+	app := NewApp(t.TempDir())
+	app.config = &config.Config{}
+	app.browserMgr = browser.NewManager(app.config, app.appRoot)
+
+	if err := app.BookmarkSave([]BrowserBookmark{{Name: "Google", URL: "https://www.google.com/"}}); err != nil {
+		t.Fatalf("BookmarkSave() error = %v", err)
+	}
+	list := app.BookmarkList()
+	if len(list) == 0 || list[0].URL != fingerprintCheckBookmarkURL {
+		t.Fatalf("first bookmark = %#v, want protected fingerprint check", list)
+	}
+}
+
+func TestBookmarkSaveKeepsFingerprintCheckOpenOnStart(t *testing.T) {
+	app := NewApp(t.TempDir())
+	app.config = &config.Config{}
+	app.browserMgr = browser.NewManager(app.config, app.appRoot)
+
+	if err := app.BookmarkSave([]BrowserBookmark{{Name: "指纹检测", URL: fingerprintCheckBookmarkURL, OpenOnStart: true}}); err != nil {
+		t.Fatalf("BookmarkSave() error = %v", err)
+	}
+	list := app.BookmarkList()
+	if len(list) == 0 || list[0].URL != fingerprintCheckBookmarkURL || !list[0].OpenOnStart {
+		t.Fatalf("first bookmark = %#v, want protected fingerprint check with openOnStart", list)
+	}
+}
+
+func TestResolveFingerprintCheckStartURLs(t *testing.T) {
+	app := NewApp(t.TempDir())
+	app.browserMgr = browser.NewManager(nil, app.appRoot)
+	app.browserMgr.Profiles["profile-123"] = &browser.Profile{ProfileId: "profile-123"}
+
+	urls := app.resolveFingerprintCheckStartURLs("profile-123", []string{"https://example.com", fingerprintCheckBookmarkURL})
+	if len(urls) != 2 {
+		t.Fatalf("urls len = %d", len(urls))
+	}
+	if urls[0] != "https://example.com" {
+		t.Fatalf("first url = %q", urls[0])
+	}
+	if !strings.HasPrefix(urls[1], "file://") || !strings.Contains(urls[1], "profileId=profile-123") {
+		t.Fatalf("fingerprint url = %q", urls[1])
+	}
+}

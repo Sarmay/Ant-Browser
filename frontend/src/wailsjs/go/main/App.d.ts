@@ -90,6 +90,8 @@ export function BrowserCoreExtendedInfo():Promise<Array<browser.CoreExtendedInfo
 
 export function BrowserCoreImportLocal():Promise<config.BrowserCore>;
 
+export function BrowserCoreImportLocalDirectory():Promise<config.BrowserCore>;
+
 export function BrowserCoreList():Promise<Array<config.BrowserCore>>;
 
 export function BrowserCoreRedownload(arg1:string,arg2:string,arg3:string):Promise<void>;
@@ -136,6 +138,8 @@ export function BrowserGetCookies(arg1:string):Promise<Array<backend.CookieInfo>
 
 export function BrowserInstanceGetTabs(arg1:string):Promise<Array<browser.Tab>>;
 
+export function BrowserInstanceOpenFingerprintCheck(arg1:string):Promise<browser.Profile>;
+
 export function BrowserInstanceOpenUrl(arg1:string,arg2:string):Promise<boolean>;
 
 export function BrowserInstanceRestart(arg1:string):Promise<browser.Profile>;
@@ -169,6 +173,8 @@ export function BrowserProfileDelete(arg1:string):Promise<void>;
 export function BrowserProfileExtensionGet(arg1:string):Promise<browser.ProfileExtensionSettings>;
 
 export function BrowserProfileExtensionSave(arg1:string,arg2:Array<string>,arg3:boolean):Promise<browser.ProfileExtensionSettings>;
+
+export function BrowserProfileFingerprintCheck(arg1:string):Promise<backend.BrowserFingerprintCheckResult>;
 
 export function BrowserProfileGetCode(arg1:string):Promise<string>;
 

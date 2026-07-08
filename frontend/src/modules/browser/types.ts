@@ -11,6 +11,7 @@
   proxyBindName?: string
   proxyBindUpdatedAt?: string
   launchArgs: string[]
+  lastLaunchArgs?: string[]
   tags: string[]
   keywords: string[]
   groupId?: string
@@ -41,6 +42,51 @@ export interface BrowserProfileInput {
   groupId?: string
 }
 
+export interface BrowserFingerprintRuntimeInfo {
+  language: string
+  languages: string[]
+  timezone: string
+  hardwareConcurrency: number
+  deviceMemory: number
+  platform: string
+  userAgent: string
+  userAgentData: string
+  webdriver: boolean
+  screenWidth: number
+  screenHeight: number
+  colorDepth: number
+  innerWidth: number
+  innerHeight: number
+  devicePixelRatio: number
+  webglVendor: string
+  webglRenderer: string
+  canvasHash: string
+  audioHash: string
+  clientRectsHash: string
+  plugins: string[]
+}
+
+export interface BrowserFingerprintExpectedInfo {
+  language: string
+  acceptLanguage: string
+  timezone: string
+  hardwareConcurrency: string
+  windowSize: string
+  brand: string
+  brandVersion: string
+  platform: string
+  platformVersion: string
+  seed: string
+  disableSpoofing: string
+  webrtcPolicy: string
+}
+
+export interface BrowserFingerprintCheckResult {
+  profileId: string
+  runtime: BrowserFingerprintRuntimeInfo
+  expected: BrowserFingerprintExpectedInfo
+}
+
 export interface BrowserProfilePackageExportResult {
   cancelled: boolean
   zipPath: string
@@ -65,10 +111,7 @@ export type BrowserProfileAutomationTarget =
   | 'locale'
   | 'screen'
   | 'hardware'
-  | 'render'
-  | 'fonts'
   | 'network'
-  | 'devices'
 
 export interface BrowserProfileCopyOptions {
   mode: BrowserProfileCopyMode

@@ -12,6 +12,7 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 	log := logger.New("Browser")
 	profile := plan.profile
 	a.clearDeferredStartTargets(input.ProfileID)
+	a.markProfileLastLaunchArgsLocked(profile, plan.args)
 
 	cmd := exec.Command(plan.chromeBinaryPath, plan.args...)
 	cmd.Dir = filepath.Dir(plan.chromeBinaryPath)

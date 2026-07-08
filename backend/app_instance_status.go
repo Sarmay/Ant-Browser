@@ -37,6 +37,7 @@ func (a *App) BrowserInstanceOpenUrl(profileId string, targetUrl string) (bool, 
 	if normalizedTargetURL == "" {
 		return false, fmt.Errorf("打开地址失败：目标地址不能为空")
 	}
+	normalizedTargetURL = a.resolveFingerprintCheckStartURL(profileId, normalizedTargetURL)
 
 	log := logger.New("Browser")
 
