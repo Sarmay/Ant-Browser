@@ -162,22 +162,57 @@ func (a *App) BookmarkSyncToProfiles() BookmarkSyncResult {
 	}
 
 	a.browserMgr.InitData()
+	type bookmarkSyncTarget struct {
+		profile *BrowserProfile
+		live    bool
+	}
+	targets := make([]bookmarkSyncTarget, 0, len(a.browserMgr.Profiles))
 	a.browserMgr.Mutex.Lock()
-	defer a.browserMgr.Mutex.Unlock()
-
-	result.Total = len(a.browserMgr.Profiles)
 	for _, profile := range a.browserMgr.Profiles {
 		if profile == nil {
 			continue
 		}
-		if isBrowserProfileLive(profile, a.browserMgr.BrowserProcesses[profile.ProfileId]) {
+		targets = append(targets, bookmarkSyncTarget{
+			profile: profile,
+			live:    isBrowserProfileLive(profile, a.browserMgr.BrowserProcesses[profile.ProfileId]),
+		})
+	}
+	a.browserMgr.Mutex.Unlock()
+
+	result.Total = len(targets)
+	for _, target := range targets {
+		profile := target.profile
+		if target.live {
 			result.Skipped++
 			result.SkippedList = append(result.SkippedList, profile.ProfileName)
 			continue
 		}
 
 		userDataDir := a.browserMgr.ResolveUserDataDir(profile)
-		if err := browser.EnsureDefaultBookmarks(userDataDir, bookmarks); err != nil {
+		runtimeBookmarks, fingerprintBookmarkURL, err := a.runtimeBookmarksForProfile(profile.ProfileId, bookmarks)
+		if err != nil {
+			result.Failed++
+			name := profile.ProfileName
+			if name == "" {
+				name = profile.ProfileId
+			}
+			result.FailedList = append(result.FailedList, name)
+			log.Error("生成实例默认书签失败", logger.F("profile_id", profile.ProfileId), logger.F("error", err.Error()))
+			continue
+		}
+		if fingerprintBookmarkURL != "" {
+			if _, err := browser.ReplaceBookmarkURL(userDataDir, fingerprintCheckBookmarkURL, fingerprintBookmarkURL); err != nil {
+				result.Failed++
+				name := profile.ProfileName
+				if name == "" {
+					name = profile.ProfileId
+				}
+				result.FailedList = append(result.FailedList, name)
+				log.Error("更新旧指纹检测书签失败", logger.F("profile_id", profile.ProfileId), logger.F("error", err.Error()))
+				continue
+			}
+		}
+		if err := browser.EnsureDefaultBookmarks(userDataDir, runtimeBookmarks); err != nil {
 			result.Failed++
 			name := profile.ProfileName
 			if name == "" {

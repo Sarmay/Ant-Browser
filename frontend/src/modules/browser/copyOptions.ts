@@ -25,7 +25,16 @@ export const BROWSER_PROFILE_AUTOMATION_TARGET_PREFIXES: Record<BrowserProfileAu
   locale: ['--lang', '--accept-lang', '--timezone'],
   screen: ['--window-size'],
   hardware: ['--fingerprint-hardware-concurrency'],
+  render: ['--fingerprint'],
+  fonts: ['--fingerprint'],
   network: ['--webrtc-ip-handling-policy', '--disable-non-proxied-udp', '--disable-spoofing'],
+  devices: ['--fingerprint'],
+}
+
+const LEGACY_AUTOMATION_TARGET_ALIASES: Partial<Record<BrowserProfileAutomationTarget, BrowserProfileAutomationTarget>> = {
+  render: 'seed',
+  fonts: 'seed',
+  devices: 'seed',
 }
 
 export const DEFAULT_BROWSER_PROFILE_AUTOMATION_TARGETS: BrowserProfileAutomationTarget[] = ['seed']
@@ -47,11 +56,12 @@ export function dedupeAutomationTargets(targets: BrowserProfileAutomationTarget[
   const output: BrowserProfileAutomationTarget[] = []
   const seen = new Set<BrowserProfileAutomationTarget>()
   for (const target of targets) {
-    if (!allowed.has(target) || seen.has(target)) {
+    const normalizedTarget = LEGACY_AUTOMATION_TARGET_ALIASES[target] || target
+    if (!allowed.has(normalizedTarget) || seen.has(normalizedTarget)) {
       continue
     }
-    seen.add(target)
-    output.push(target)
+    seen.add(normalizedTarget)
+    output.push(normalizedTarget)
   }
   return output
 }

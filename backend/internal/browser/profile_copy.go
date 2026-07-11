@@ -22,6 +22,12 @@ const (
 	copyAutomationTargetNetwork  = "network"
 )
 
+var legacyCopyAutomationTargetAliases = map[string]string{
+	"render":  copyAutomationTargetSeed,
+	"fonts":   copyAutomationTargetSeed,
+	"devices": copyAutomationTargetSeed,
+}
+
 var profileCopyNameSuffixPattern = regexp.MustCompile(`[[:space:]]*(?:\([[:space:]]*副本[[:space:]]*\)|（副本）)[[:space:]]*(?:[0-9]{12})?$`)
 
 // Copy 复制实例配置（除指纹参数外全部复制，指纹使用默认值生成新种子）
@@ -162,6 +168,9 @@ func normalizeCopyAutomationTargets(targets []string) ([]string, error) {
 		value := strings.ToLower(strings.TrimSpace(target))
 		if value == "" {
 			continue
+		}
+		if alias, ok := legacyCopyAutomationTargetAliases[value]; ok {
+			value = alias
 		}
 		if _, ok := copyAutomationTargetArgPrefixes()[value]; !ok {
 			unknown = append(unknown, value)

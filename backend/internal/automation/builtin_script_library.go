@@ -15,6 +15,7 @@ const (
 	NewsQueryTXTScriptID        = "news-query-txt"
 	ProtonMailFirstMessageID    = "proton-mail-first-message"
 	WebImageGenerateScriptID    = "web-image-generate-download"
+	LianjiaWHHomeStep1ScriptID  = "lianjia-wh-home-step1"
 	builtinScriptLibraryRoot    = "demo-library"
 )
 
@@ -23,6 +24,7 @@ var builtinScriptLibraryPackageDirs = map[string]string{
 	NewsQueryTXTScriptID:        builtinScriptLibraryRoot + "/" + NewsQueryTXTScriptID,
 	ProtonMailFirstMessageID:    builtinScriptLibraryRoot + "/" + ProtonMailFirstMessageID,
 	WebImageGenerateScriptID:    builtinScriptLibraryRoot + "/" + WebImageGenerateScriptID,
+	LianjiaWHHomeStep1ScriptID:  builtinScriptLibraryRoot + "/" + LianjiaWHHomeStep1ScriptID,
 }
 
 var builtinScriptLibraryDefaultOrder = []string{
@@ -30,6 +32,7 @@ var builtinScriptLibraryDefaultOrder = []string{
 	NewsQueryTXTScriptID,
 	ProtonMailFirstMessageID,
 	WebImageGenerateScriptID,
+	LianjiaWHHomeStep1ScriptID,
 }
 
 //go:embed demo-library

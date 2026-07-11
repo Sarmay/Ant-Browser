@@ -32,12 +32,16 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 			coreId = defaultCore.CoreId
 		}
 	}
+	fingerprintArgs := append([]string{}, input.FingerprintArgs...)
+	if len(fingerprintArgs) == 0 && m.Config != nil {
+		fingerprintArgs = append([]string{}, m.Config.Browser.DefaultFingerprintArgs...)
+	}
 	profile := &Profile{
 		ProfileId:       profileId,
 		ProfileName:     input.ProfileName,
 		UserDataDir:     userDataDir,
 		CoreId:          coreId,
-		FingerprintArgs: input.FingerprintArgs,
+		FingerprintArgs: fingerprintArgs,
 		ProxyId:         resolvedProxy.ProxyId,
 		ProxyConfig:     resolvedProxy.ProxyConfig,
 		LaunchArgs:      input.LaunchArgs,

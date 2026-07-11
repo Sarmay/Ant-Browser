@@ -48,6 +48,9 @@ export interface BrowserFingerprintRuntimeInfo {
   timezone: string
   hardwareConcurrency: number
   deviceMemory: number
+  maxTouchPoints: number
+  doNotTrack: string
+  mediaDeviceCount: number
   platform: string
   userAgent: string
   userAgentData: string
@@ -57,6 +60,8 @@ export interface BrowserFingerprintRuntimeInfo {
   colorDepth: number
   innerWidth: number
   innerHeight: number
+  outerWidth: number
+  outerHeight: number
   devicePixelRatio: number
   webglVendor: string
   webglRenderer: string
@@ -71,6 +76,9 @@ export interface BrowserFingerprintExpectedInfo {
   acceptLanguage: string
   timezone: string
   hardwareConcurrency: string
+  deviceMemory: string
+  colorDepth: string
+  touchPoints: string
   windowSize: string
   brand: string
   brandVersion: string
@@ -79,12 +87,42 @@ export interface BrowserFingerprintExpectedInfo {
   seed: string
   disableSpoofing: string
   webrtcPolicy: string
+  doNotTrack: string
+  mediaDevices: string
+  canvasNoise: string
+  audioNoise: string
+  clientRectsNoise: string
+  fontList: string
+  webglVendor: string
+  webglRenderer: string
 }
 
 export interface BrowserFingerprintCheckResult {
   profileId: string
   runtime: BrowserFingerprintRuntimeInfo
   expected: BrowserFingerprintExpectedInfo
+}
+
+export interface BrowserFingerprintCapabilityRow {
+  capability: string
+  status: string
+  inputArg: string
+  runtimeArg: string
+  action: string
+  note: string
+}
+
+export interface BrowserFingerprintCapabilityReport {
+  profileId: string
+  coreId: string
+  coreName: string
+  chromeVersion: string
+  chromeMajor: number
+  versionStatus: string
+  rawArgs: string[]
+  launchArgs: string[]
+  rows: BrowserFingerprintCapabilityRow[]
+  warnings: string[]
 }
 
 export interface BrowserProfilePackageExportResult {
@@ -111,7 +149,10 @@ export type BrowserProfileAutomationTarget =
   | 'locale'
   | 'screen'
   | 'hardware'
+  | 'render'
+  | 'fonts'
   | 'network'
+  | 'devices'
 
 export interface BrowserProfileCopyOptions {
   mode: BrowserProfileCopyMode

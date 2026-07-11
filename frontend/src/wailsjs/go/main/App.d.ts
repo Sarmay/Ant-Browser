@@ -176,6 +176,8 @@ export function BrowserProfileExtensionSave(arg1:string,arg2:Array<string>,arg3:
 
 export function BrowserProfileFingerprintCheck(arg1:string):Promise<backend.BrowserFingerprintCheckResult>;
 
+export function BrowserProfileFingerprintMatrix(arg1:string,arg2:string,arg3:Array<string>):Promise<backend.BrowserFingerprintCapabilityReport>;
+
 export function BrowserProfileGetCode(arg1:string):Promise<string>;
 
 export function BrowserProfileList():Promise<Array<browser.Profile>>;

@@ -61,3 +61,24 @@ func TestResolveFingerprintCheckStartURLs(t *testing.T) {
 		t.Fatalf("fingerprint url = %q", urls[1])
 	}
 }
+
+func TestRuntimeBookmarksForProfileUsesFileURL(t *testing.T) {
+	app := NewApp(t.TempDir())
+	app.config = &config.Config{}
+	app.browserMgr = browser.NewManager(app.config, app.appRoot)
+	app.browserMgr.Profiles["profile-123"] = &browser.Profile{ProfileId: "profile-123"}
+
+	bookmarks, fingerprintURL, err := app.runtimeBookmarksForProfile("profile-123", []BrowserBookmark{
+		{Name: "指纹检测", URL: fingerprintCheckBookmarkURL},
+		{Name: "Ping0", URL: "https://ping0.cc/"},
+	})
+	if err != nil {
+		t.Fatalf("runtimeBookmarksForProfile error = %v", err)
+	}
+	if !strings.HasPrefix(fingerprintURL, "file://") || strings.Contains(fingerprintURL, "ts=") {
+		t.Fatalf("fingerprintURL = %q, want stable file URL", fingerprintURL)
+	}
+	if len(bookmarks) != 2 || bookmarks[0].URL != fingerprintURL || bookmarks[1].URL != "https://ping0.cc/" {
+		t.Fatalf("bookmarks = %#v, fingerprintURL = %q", bookmarks, fingerprintURL)
+	}
+}

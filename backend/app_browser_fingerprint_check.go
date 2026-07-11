@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"ant-chrome/backend/internal/logger"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -18,6 +19,9 @@ type BrowserFingerprintRuntimeInfo struct {
 	Timezone            string   `json:"timezone"`
 	HardwareConcurrency int      `json:"hardwareConcurrency"`
 	DeviceMemory        float64  `json:"deviceMemory"`
+	MaxTouchPoints      int      `json:"maxTouchPoints"`
+	DoNotTrack          string   `json:"doNotTrack"`
+	MediaDeviceCount    int      `json:"mediaDeviceCount"`
 	Platform            string   `json:"platform"`
 	UserAgent           string   `json:"userAgent"`
 	UserAgentData       string   `json:"userAgentData"`
@@ -27,6 +31,8 @@ type BrowserFingerprintRuntimeInfo struct {
 	ColorDepth          int      `json:"colorDepth"`
 	InnerWidth          int      `json:"innerWidth"`
 	InnerHeight         int      `json:"innerHeight"`
+	OuterWidth          int      `json:"outerWidth"`
+	OuterHeight         int      `json:"outerHeight"`
 	DevicePixelRatio    float64  `json:"devicePixelRatio"`
 	WebGLVendor         string   `json:"webglVendor"`
 	WebGLRenderer       string   `json:"webglRenderer"`
@@ -41,6 +47,9 @@ type BrowserFingerprintExpectedInfo struct {
 	AcceptLanguage      string `json:"acceptLanguage"`
 	Timezone            string `json:"timezone"`
 	HardwareConcurrency string `json:"hardwareConcurrency"`
+	DeviceMemory        string `json:"deviceMemory"`
+	ColorDepth          string `json:"colorDepth"`
+	TouchPoints         string `json:"touchPoints"`
 	WindowSize          string `json:"windowSize"`
 	Brand               string `json:"brand"`
 	BrandVersion        string `json:"brandVersion"`
@@ -49,6 +58,14 @@ type BrowserFingerprintExpectedInfo struct {
 	Seed                string `json:"seed"`
 	DisableSpoofing     string `json:"disableSpoofing"`
 	WebRTCPolicy        string `json:"webrtcPolicy"`
+	DoNotTrack          string `json:"doNotTrack"`
+	MediaDevices        string `json:"mediaDevices"`
+	CanvasNoise         string `json:"canvasNoise"`
+	AudioNoise          string `json:"audioNoise"`
+	ClientRectsNoise    string `json:"clientRectsNoise"`
+	FontList            string `json:"fontList"`
+	WebGLVendor         string `json:"webglVendor"`
+	WebGLRenderer       string `json:"webglRenderer"`
 }
 
 func (a *App) BrowserProfileFingerprintCheck(profileId string) (*BrowserFingerprintCheckResult, error) {
@@ -57,16 +74,9 @@ func (a *App) BrowserProfileFingerprintCheck(profileId string) (*BrowserFingerpr
 		return nil, fmt.Errorf("实例 ID 不能为空")
 	}
 
-	var profile *BrowserProfile
-	for _, item := range a.browserMgr.List() {
-		if item.ProfileId == profileId {
-			current := item
-			profile = &current
-			break
-		}
-	}
-	if profile == nil {
-		return nil, fmt.Errorf("实例不存在: %s", profileId)
+	profile, err := a.fingerprintCheckRuntimeProfileSnapshot(profileId, detectBrowserRuntimeByUserDataDir, browserDebugPortReady)
+	if err != nil {
+		return nil, err
 	}
 	if !profile.Running || !profile.DebugReady || profile.DebugPort <= 0 {
 		return nil, fmt.Errorf("实例未处于可自测状态，请先启动实例并等待调试端口就绪")
@@ -82,8 +92,82 @@ func (a *App) BrowserProfileFingerprintCheck(profileId string) (*BrowserFingerpr
 	return &BrowserFingerprintCheckResult{
 		ProfileId: profile.ProfileId,
 		Runtime:   runtimeInfo,
-		Expected:  buildBrowserFingerprintExpected(profile.FingerprintArgs),
+		Expected:  buildBrowserFingerprintExpected(a.fingerprintCheckExpectedArgsFromProfile(profile)),
 	}, nil
+}
+
+func (a *App) fingerprintCheckRuntimeProfileSnapshot(profileId string, detector func(string) (browserRuntimeDetection, bool), debugPortReady func(int) bool) (*BrowserProfile, error) {
+	if a == nil || a.browserMgr == nil {
+		return nil, fmt.Errorf("浏览器管理器未初始化")
+	}
+	profileId = strings.TrimSpace(profileId)
+	if profileId == "" {
+		return nil, fmt.Errorf("实例 ID 不能为空")
+	}
+	if detector == nil {
+		detector = detectBrowserRuntimeByUserDataDir
+	}
+	if debugPortReady == nil {
+		debugPortReady = browserDebugPortReady
+	}
+
+	a.browserMgr.Mutex.Lock()
+
+	profile := a.browserMgr.Profiles[profileId]
+	if profile == nil {
+		a.browserMgr.Mutex.Unlock()
+		return nil, fmt.Errorf("实例不存在: %s", profileId)
+	}
+	a.ensureProfileLaunchCode(profile)
+	if !profile.Running {
+		userDataDir := a.browserMgr.ResolveUserDataDir(profile)
+		if detection, ok := detector(userDataDir); ok && detection.DebugReady {
+			a.markProfileRunningLocked(profileId, profile, nil, detection.PID, detection.DebugPort, true, "")
+			logger.New("Browser").Warn("指纹自测前发现同一用户数据目录浏览器已运行，已同步实例状态",
+				logger.F("profile_id", profileId),
+				logger.F("user_data_dir", userDataDir),
+				logger.F("pid", detection.PID),
+				logger.F("debug_port", detection.DebugPort),
+			)
+		}
+	}
+	probeDebugPort := 0
+	if profile.Running && !profile.DebugReady && profile.DebugPort > 0 {
+		probeDebugPort = profile.DebugPort
+	}
+	snapshot := copyBrowserProfileSnapshot(profile)
+	a.browserMgr.Mutex.Unlock()
+
+	debugReadyChanged := false
+	if probeDebugPort > 0 && debugPortReady(probeDebugPort) {
+		a.browserMgr.Mutex.Lock()
+		profile = a.browserMgr.Profiles[profileId]
+		if profile == nil {
+			a.browserMgr.Mutex.Unlock()
+			return nil, fmt.Errorf("实例不存在: %s", profileId)
+		}
+		if profile != nil && profile.Running && profile.DebugPort == probeDebugPort && !profile.DebugReady {
+			a.markProfileDebugReadyLocked(profile, probeDebugPort)
+			debugReadyChanged = true
+			logger.New("Browser").Warn("指纹自测前发现调试端口已就绪，已同步实例调试状态",
+				logger.F("profile_id", profileId),
+				logger.F("debug_port", probeDebugPort),
+			)
+		}
+		snapshot = copyBrowserProfileSnapshot(profile)
+		a.browserMgr.Mutex.Unlock()
+	}
+	if debugReadyChanged && snapshot != nil && snapshot.DebugReady {
+		if a.launchServer != nil {
+			a.launchServer.SetActiveProfile(snapshot)
+		}
+		a.emitBrowserInstanceUpdated(snapshot)
+	}
+	return snapshot, nil
+}
+
+func browserDebugPortReady(debugPort int) bool {
+	return debugPort > 0 && probeBrowserDebugPort(debugPort, browserDebugProbeTimeout) == nil
 }
 
 func evaluateBrowserFingerprintRuntime(debugPort int) (BrowserFingerprintRuntimeInfo, error) {
@@ -149,6 +233,15 @@ func evaluateBrowserFingerprintRuntime(debugPort int) (BrowserFingerprintRuntime
     document.body.removeChild(node);
     return hashString(rects);
   }
+  async function mediaDeviceCount() {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return 0;
+      var devices = await navigator.mediaDevices.enumerateDevices();
+      return devices ? devices.length : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
   var gl = document.createElement('canvas').getContext('webgl') || document.createElement('canvas').getContext('experimental-webgl');
   var debug = gl && gl.getExtension('WEBGL_debug_renderer_info');
   return JSON.stringify({
@@ -157,6 +250,9 @@ func evaluateBrowserFingerprintRuntime(debugPort int) (BrowserFingerprintRuntime
     timezone: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || '',
     hardwareConcurrency: navigator.hardwareConcurrency || 0,
     deviceMemory: navigator.deviceMemory || 0,
+    maxTouchPoints: navigator.maxTouchPoints || 0,
+    doNotTrack: navigator.doNotTrack || '',
+    mediaDeviceCount: await mediaDeviceCount(),
     platform: navigator.platform || '',
     userAgent: navigator.userAgent || '',
     userAgentData: navigator.userAgentData ? JSON.stringify({brands: navigator.userAgentData.brands || [], mobile: navigator.userAgentData.mobile, platform: navigator.userAgentData.platform || ''}) : '',
@@ -166,6 +262,8 @@ func evaluateBrowserFingerprintRuntime(debugPort int) (BrowserFingerprintRuntime
     colorDepth: screen.colorDepth || 0,
     innerWidth: window.innerWidth || 0,
     innerHeight: window.innerHeight || 0,
+    outerWidth: window.outerWidth || 0,
+    outerHeight: window.outerHeight || 0,
     devicePixelRatio: window.devicePixelRatio || 0,
     webglVendor: debug ? gl.getParameter(debug.UNMASKED_VENDOR_WEBGL) : '',
     webglRenderer: debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : '',
@@ -179,7 +277,7 @@ func evaluateBrowserFingerprintRuntime(debugPort int) (BrowserFingerprintRuntime
 	result, err := cdpCall(debugPort, "Runtime.evaluate", map[string]any{
 		"expression":    expression,
 		"returnByValue": true,
-		"awaitPromise":   true,
+		"awaitPromise":  true,
 		"timeout":       3000,
 	})
 	if err != nil {
@@ -204,6 +302,9 @@ func buildBrowserFingerprintExpected(args []string) BrowserFingerprintExpectedIn
 		AcceptLanguage:      browserArgValue(normalizedArgs, "--accept-lang"),
 		Timezone:            browserArgValue(normalizedArgs, "--timezone"),
 		HardwareConcurrency: browserArgValue(normalizedArgs, "--fingerprint-hardware-concurrency"),
+		DeviceMemory:        "",
+		ColorDepth:          "",
+		TouchPoints:         "",
 		WindowSize:          browserArgValue(normalizedArgs, "--window-size"),
 		Brand:               browserArgValue(normalizedArgs, "--fingerprint-brand"),
 		BrandVersion:        browserArgValue(normalizedArgs, "--fingerprint-brand-version"),
@@ -212,7 +313,51 @@ func buildBrowserFingerprintExpected(args []string) BrowserFingerprintExpectedIn
 		Seed:                browserArgValue(normalizedArgs, "--fingerprint"),
 		DisableSpoofing:     browserArgValue(normalizedArgs, "--disable-spoofing"),
 		WebRTCPolicy:        browserWebRTCPolicy(normalizedArgs),
+		DoNotTrack:          "",
+		MediaDevices:        "",
+		CanvasNoise:         browserFingerprintExpectedSwitch(normalizedArgs, "--fingerprinting-canvas-image-data-noise", "--fingerprint-canvas-noise"),
+		AudioNoise:          "",
+		ClientRectsNoise:    browserFingerprintExpectedSwitch(normalizedArgs, "--fingerprinting-client-rects-noise", "--fingerprint-client-rects-noise"),
+		FontList:            "",
+		WebGLVendor:         "",
+		WebGLRenderer:       "",
 	}
+}
+
+func browserFingerprintExpectedSwitch(args []string, flagKey string, valueKey string) string {
+	flagIndex := browserLastArgIndexWithKey(args, flagKey)
+	valueIndex := browserLastArgIndexWithKey(args, valueKey)
+	if flagIndex < 0 && valueIndex < 0 {
+		return ""
+	}
+	if flagIndex > valueIndex {
+		if browserFingerprintArgEnabled(args[flagIndex]) {
+			return "1"
+		}
+		return ""
+	}
+	if browserFingerprintArgEnabled(args[valueIndex]) {
+		return "1"
+	}
+	return ""
+}
+
+func browserLastArgIndexWithKey(args []string, key string) int {
+	key = strings.ToLower(strings.TrimSpace(key))
+	for index := len(args) - 1; index >= 0; index-- {
+		arg := strings.TrimSpace(args[index])
+		if browserFingerprintArgKey(arg) == key {
+			return index
+		}
+	}
+	return -1
+}
+
+func browserFingerprintFontList(args []string) string {
+	if value := browserArgValue(args, "--fingerprint-font-list"); value != "" {
+		return value
+	}
+	return browserArgValue(args, "--fingerprint-fonts")
 }
 
 func browserWebRTCPolicy(args []string) string {

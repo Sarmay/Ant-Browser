@@ -37,6 +37,7 @@ func (m *Manager) loadProfiles() {
 		} else {
 			for _, p := range profiles {
 				p.CoreId = normalizeProfileCoreID(p.CoreId)
+				p.FingerprintArgs = upgradeLegacyMinimalFingerprintArgs(p.FingerprintArgs)
 				m.Profiles[p.ProfileId] = p
 			}
 			if len(profiles) > 0 {
@@ -71,7 +72,7 @@ func (m *Manager) loadProfiles() {
 			ProfileName:        item.ProfileName,
 			UserDataDir:        item.UserDataDir,
 			CoreId:             normalizeProfileCoreID(item.CoreId),
-			FingerprintArgs:    append([]string{}, item.FingerprintArgs...),
+			FingerprintArgs:    upgradeLegacyMinimalFingerprintArgs(item.FingerprintArgs),
 			ProxyId:            item.ProxyId,
 			ProxyConfig:        item.ProxyConfig,
 			ProxyBindSourceID:  item.ProxyBindSourceID,

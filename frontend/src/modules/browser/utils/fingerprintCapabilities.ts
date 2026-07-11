@@ -1,4 +1,4 @@
-﻿export type FingerprintCapabilityMode = 'configurable' | 'seed' | 'platform_limited' | 'removed'
+﻿export type FingerprintCapabilityMode = 'configurable' | 'seed' | 'platform_limited' | 'unconfirmed' | 'removed'
 
 export interface FingerprintCapabilityItem {
   id: string
@@ -27,7 +27,7 @@ export const FINGERPRINT_CAPABILITIES: FingerprintCapabilityItem[] = [
     id: 'seed',
     name: '核心种子',
     mode: 'configurable',
-    coverage: '启用源内核大部分指纹伪装，并保持同实例稳定',
+    coverage: '启用本地 Chrom-144 已接入的指纹伪装，并保持同实例稳定',
     args: ['--fingerprint'],
   },
   {
@@ -46,44 +46,44 @@ export const FINGERPRINT_CAPABILITIES: FingerprintCapabilityItem[] = [
   },
   {
     id: 'hardware',
-    name: 'CPU 与内存',
+    name: 'CPU',
     mode: 'configurable',
-    coverage: 'CPU 核心数可配置；内存由源内核 seed 模型生成',
-    args: ['--fingerprint-hardware-concurrency', '--fingerprint'],
+    coverage: 'CPU 核心数已实测生效；设备内存、色深和触控点本地 Chrom-144 实测无效，不再作为运行参数传递',
+    args: ['--fingerprint-hardware-concurrency'],
   },
   {
     id: 'canvas-audio',
     name: 'Canvas / Audio',
-    mode: 'seed',
-    coverage: '由 --fingerprint 种子驱动，适合同实例稳定、不同实例差异化',
-    args: ['--fingerprint', '--disable-spoofing=canvas,audio'],
+    mode: 'configurable',
+    coverage: 'Canvas ImageData 噪声已实测生效；Audio 独立参数本地 Chrom-144 实测无效，不再作为运行参数传递',
+    args: ['--fingerprinting-canvas-image-data-noise', '--disable-spoofing=canvas,audio'],
   },
   {
     id: 'fonts-clientrects',
     name: '字体 / ClientRects',
-    mode: 'seed',
-    coverage: '由 --fingerprint 种子驱动，可用 disable-spoofing 排除单项伪装',
-    args: ['--fingerprint', '--disable-spoofing=font,clientrects'],
+    mode: 'configurable',
+    coverage: 'ClientRects 噪声已实测生效；字体列表独立参数本地 Chrom-144 实测无效，不再作为运行参数传递',
+    args: ['--fingerprinting-client-rects-noise', '--disable-spoofing=font,clientrects'],
   },
   {
     id: 'webgl',
     name: 'WebGL 图像与 GPU',
-    mode: 'platform_limited',
-    coverage: 'WebGL 图像由 seed 驱动；GPU 元数据在 Linux 支持更完整',
-    args: ['--fingerprint', '--disable-spoofing=gpu'],
+    mode: 'unconfirmed',
+    coverage: 'WebGL Vendor / Renderer 独立参数本地 Chrom-144 实测无效；GPU 伪装按种子和 disable-spoofing 控制',
+    args: ['--disable-spoofing=gpu'],
   },
   {
     id: 'webrtc',
     name: 'WebRTC 防泄漏',
     mode: 'configurable',
-    coverage: '通过禁用非代理 UDP 降低本机 IP 泄漏风险',
-    args: ['--disable-non-proxied-udp'],
+    coverage: 'WebRTC 防泄漏开关可配置；DNT 和媒体设备数量本地 Chrom-144 实测无效，不再作为运行参数传递',
+    args: ['--disable-non-proxied-udp', '--webrtc-ip-handling-policy'],
   },
   {
     id: 'gpu-legacy',
     name: '旧 GPU 指定参数',
     mode: 'removed',
-    coverage: 'Chrome 144 已移除独立 GPU vendor / renderer 参数',
+    coverage: '当前适配矩阵不再把旧 GPU vendor / renderer 参数作为独立运行参数',
     args: ['--fingerprint-gpu-vendor', '--fingerprint-gpu-renderer', '--disable-gpu-fingerprint'],
   },
 ]
@@ -154,5 +154,6 @@ export function capabilityModeLabel(mode: FingerprintCapabilityMode): string {
   if (mode === 'configurable') return '可配置'
   if (mode === 'seed') return '种子驱动'
   if (mode === 'platform_limited') return '平台限制'
+  if (mode === 'unconfirmed') return '实测无效'
   return '已移除'
 }

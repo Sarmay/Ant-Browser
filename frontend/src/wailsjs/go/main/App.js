@@ -334,6 +334,10 @@ export function BrowserProfileFingerprintCheck(arg1) {
   return window['go']['main']['App']['BrowserProfileFingerprintCheck'](arg1);
 }
 
+export function BrowserProfileFingerprintMatrix(arg1, arg2, arg3) {
+  return window['go']['main']['App']['BrowserProfileFingerprintMatrix'](arg1, arg2, arg3);
+}
+
 export function BrowserProfileGetCode(arg1) {
   return window['go']['main']['App']['BrowserProfileGetCode'](arg1);
 }

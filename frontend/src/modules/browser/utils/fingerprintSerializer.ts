@@ -33,10 +33,23 @@ export interface FingerprintConfig {
 
   // 硬件信息
   hardwareConcurrency?: string  // --fingerprint-hardware-concurrency=
+  colorDepth?: string           // 兼容解析：本地 Chrom-144 实测无效，保存时不再输出
+  deviceMemory?: string         // 兼容解析：本地 Chrom-144 实测无效，保存时不再输出
+  touchPoints?: string          // 兼容解析：本地 Chrom-144 实测无效，保存时不再输出
 
   // 网络与隐私
   webrtcPolicy?: string         // --disable-non-proxied-udp 或 --webrtc-ip-handling-policy=
   disableSpoofing?: string[]    // --disable-spoofing=font,audio,canvas,clientrects,gpu
+  doNotTrack?: string           // 兼容解析：本地 Chrom-144 实测无效，保存时不再输出
+  mediaDevices?: string         // 兼容解析：本地 Chrom-144 实测无效，保存时不再输出
+
+  // 兼容细项：已验证噪声项会转换到 Chrom-144 真实开关，其余原样保留
+  canvasNoise?: string          // 1 -> --fingerprinting-canvas-image-data-noise
+  audioNoise?: string           // 兼容解析：本地 Chrom-144 实测无效，保存时不再输出
+  clientRectsNoise?: string     // 1 -> --fingerprinting-client-rects-noise
+  fontList?: string             // 兼容解析：本地 Chrom-144 实测无效，保存时不再输出
+  webglVendor?: string          // 兼容解析：本地 Chrom-144 实测无效，保存时不再输出
+  webglRenderer?: string        // 兼容解析：本地 Chrom-144 实测无效，保存时不再输出
 
   unknownArgs?: string[]        // 无法识别的原始参数，原样保留
 }
@@ -55,8 +68,22 @@ export const KEY_MAP: Record<string, keyof FingerprintConfig> = {
   '--timezone': 'timezone',
   '--window-size': 'resolution',
   '--fingerprint-hardware-concurrency': 'hardwareConcurrency',
+  '--fingerprint-color-depth': 'colorDepth',
+  '--fingerprint-device-memory': 'deviceMemory',
+  '--fingerprint-touch-points': 'touchPoints',
   '--webrtc-ip-handling-policy': 'webrtcPolicy',
   '--disable-spoofing': 'disableSpoofing',
+  '--fingerprint-do-not-track': 'doNotTrack',
+  '--fingerprint-media-devices': 'mediaDevices',
+  '--fingerprint-canvas-noise': 'canvasNoise',
+  '--fingerprinting-canvas-image-data-noise': 'canvasNoise',
+  '--fingerprint-audio-noise': 'audioNoise',
+  '--fingerprint-client-rects-noise': 'clientRectsNoise',
+  '--fingerprinting-client-rects-noise': 'clientRectsNoise',
+  '--fingerprint-font-list': 'fontList',
+  '--fingerprint-fonts': 'fontList',
+  '--fingerprint-webgl-vendor': 'webglVendor',
+  '--fingerprint-webgl-renderer': 'webglRenderer',
 }
 
 export interface FingerprintValidationIssue {
@@ -71,6 +98,8 @@ export interface FingerprintValidationResult {
 
 const FLAG_MAP: Record<string, keyof FingerprintConfig> = {
   '--disable-non-proxied-udp': 'webrtcPolicy',
+  '--fingerprinting-canvas-image-data-noise': 'canvasNoise',
+  '--fingerprinting-client-rects-noise': 'clientRectsNoise',
 }
 
 const KERNEL_SPOOFING_KEYS = new Set(['font', 'audio', 'canvas', 'clientrects', 'gpu'])
@@ -84,6 +113,8 @@ const KERNEL_SUPPORTED_ARG_KEYS = new Set([
   '--fingerprint-platform',
   '--fingerprint-platform-version',
   '--fingerprint-hardware-concurrency',
+  '--fingerprinting-canvas-image-data-noise',
+  '--fingerprinting-client-rects-noise',
   '--disable-non-proxied-udp',
   '--disable-spoofing',
   '--lang',
@@ -94,17 +125,33 @@ const KERNEL_SUPPORTED_ARG_KEYS = new Set([
 ])
 
 
-const UNSUPPORTED_FINGERPRINT_ARG_KEYS = new Set([
+const LEGACY_FINGERPRINT_ARG_KEYS = new Set([
+  '--fingerprint-gpu-vendor',
+  '--fingerprint-gpu-renderer',
+  '--disable-gpu-fingerprint',
+])
+
+const CONVERTED_FINGERPRINT_ARG_KEYS = new Set([
+  '--fingerprint-canvas-noise',
+  '--fingerprint-client-rects-noise',
+])
+
+const NO_EFFECT_FINGERPRINT_ARG_KEYS = new Set([
   '--fingerprint-color-depth',
   '--fingerprint-device-memory',
-  '--fingerprint-canvas-noise',
-  '--fingerprint-webgl-vendor',
-  '--fingerprint-webgl-renderer',
-  '--fingerprint-audio-noise',
-  '--fingerprint-fonts',
+  '--fingerprint-touch-points',
   '--fingerprint-do-not-track',
   '--fingerprint-media-devices',
-  '--fingerprint-touch-points',
+  '--fingerprint-audio-noise',
+  '--fingerprint-font-list',
+  '--fingerprint-fonts',
+  '--fingerprint-webgl-vendor',
+  '--fingerprint-webgl-renderer',
+  '--fingerprint-screen-width',
+  '--fingerprint-screen-height',
+  '--fingerprint-device-scale-factor',
+  '--fingerprint-location',
+  '--fingerprinting-canvas-measuretext-noise',
 ])
 
 // FingerprintConfig → string[]
@@ -136,7 +183,12 @@ export function serialize(config: FingerprintConfig): string[] {
   } else if (config.webrtcPolicy) {
     args.push(`--webrtc-ip-handling-policy=${config.webrtcPolicy}`)
   }
-
+  if (isEnabledFlagValue(config.canvasNoise)) {
+    args.push('--fingerprinting-canvas-image-data-noise')
+  }
+  if (isEnabledFlagValue(config.clientRectsNoise)) {
+    args.push('--fingerprinting-client-rects-noise')
+  }
   const disableSpoofing = normalizeDisableSpoofing(config.disableSpoofing)
   if (disableSpoofing.length) args.push(`--disable-spoofing=${disableSpoofing.join(',')}`)
 
@@ -153,6 +205,8 @@ export function deserialize(args: string[]): FingerprintConfig {
       const field = FLAG_MAP[arg]
       if (field === 'webrtcPolicy') {
         config.webrtcPolicy = 'disable_non_proxied_udp'
+      } else if (field === 'canvasNoise' || field === 'clientRectsNoise') {
+        ;(config as Record<string, unknown>)[field] = '1'
       } else {
         config.unknownArgs!.push(arg)
       }
@@ -163,9 +217,7 @@ export function deserialize(args: string[]): FingerprintConfig {
     const field = KEY_MAP[key]
 
     if (!field) {
-      if (!UNSUPPORTED_FINGERPRINT_ARG_KEYS.has(key)) {
-        config.unknownArgs!.push(arg)
-      }
+      config.unknownArgs!.push(arg)
       continue
     }
 
@@ -189,7 +241,8 @@ export function deserialize(args: string[]): FingerprintConfig {
 }
 
 export function normalizeFingerprintPlatform(platform: string): string {
-  return platform.trim().toLowerCase() === 'mac' ? 'macos' : platform.trim()
+  const normalized = platform.trim().toLowerCase()
+  return normalized === 'mac' ? 'macos' : normalized
 }
 
 export function normalizeDisableSpoofing(values?: string[]): string[] {
@@ -209,8 +262,12 @@ export function validateFingerprintArgs(rawArgs: string[]): FingerprintValidatio
     const trimmed = arg.trim()
     if (!trimmed.startsWith('--')) continue
     const key = argKey(trimmed)
-    if (UNSUPPORTED_FINGERPRINT_ARG_KEYS.has(key)) {
-      issues.push({ level: 'warning', message: `${key} 不是 Chrome 144 源内核参数，已不会作为独立配置生效` })
+    if (LEGACY_FINGERPRINT_ARG_KEYS.has(key)) {
+      issues.push({ level: 'warning', message: `${key} 配置中保留，但当前适配矩阵不作为独立运行参数；对应能力按 --fingerprint 种子或 --disable-spoofing 处理` })
+    } else if (CONVERTED_FINGERPRINT_ARG_KEYS.has(key)) {
+      issues.push({ level: 'info', message: `${key} 保存时会转换为当前 Chrom-144 已验证的噪声开关` })
+    } else if (NO_EFFECT_FINGERPRINT_ARG_KEYS.has(key)) {
+      issues.push({ level: 'warning', message: `${key} 本地 Chrom-144 实测无效，保存后不会作为运行参数传递` })
     } else if (!KERNEL_SUPPORTED_ARG_KEYS.has(key)) {
       issues.push({ level: 'info', message: `${key} 未在当前指纹面板建模，会作为原始参数保留` })
     }
@@ -262,6 +319,11 @@ export function validateFingerprintArgs(rawArgs: string[]): FingerprintValidatio
     valid: !issues.some(issue => issue.level === 'error'),
     issues,
   }
+}
+
+function isEnabledFlagValue(value?: string): boolean {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on'
 }
 
 function argKey(arg: string): string {
@@ -332,7 +394,14 @@ export function buildFingerprintConfigFromPersona(persona: FingerprintPersona): 
     resolution: persona.resolution,
     hardwareConcurrency: persona.hardwareConcurrency,
     webrtcPolicy: 'disable_non_proxied_udp',
+    canvasNoise: '1',
+    clientRectsNoise: '1',
   }
+}
+
+const EFFECTIVE_RUNTIME_NOISE_CONFIG: Pick<FingerprintConfig, 'canvasNoise' | 'clientRectsNoise'> = {
+  canvasNoise: '1',
+  clientRectsNoise: '1',
 }
 
 // ─── 预设指纹配置 ────────────────────────────────────────────────────────────
@@ -357,6 +426,7 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       resolution: '1920,1080',
       hardwareConcurrency: '8',
       webrtcPolicy: 'disable_non_proxied_udp',
+      ...EFFECTIVE_RUNTIME_NOISE_CONFIG,
     },
   },
   {
@@ -371,6 +441,7 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       resolution: '2560,1440',
       hardwareConcurrency: '16',
       webrtcPolicy: 'disable_non_proxied_udp',
+      ...EFFECTIVE_RUNTIME_NOISE_CONFIG,
     },
   },
   {
@@ -385,6 +456,7 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       resolution: '2560,1440',
       hardwareConcurrency: '10',
       webrtcPolicy: 'disable_non_proxied_udp',
+      ...EFFECTIVE_RUNTIME_NOISE_CONFIG,
     },
   },
   {
@@ -399,6 +471,7 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       resolution: '1366,768',
       hardwareConcurrency: '4',
       webrtcPolicy: 'default_public_interface_only',
+      ...EFFECTIVE_RUNTIME_NOISE_CONFIG,
     },
   },
   {
@@ -413,6 +486,7 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       resolution: '1920,1080',
       hardwareConcurrency: '8',
       webrtcPolicy: 'disable_non_proxied_udp',
+      ...EFFECTIVE_RUNTIME_NOISE_CONFIG,
     },
   },
   {
@@ -427,6 +501,7 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       resolution: '1440,900',
       hardwareConcurrency: '8',
       webrtcPolicy: 'disable_non_proxied_udp',
+      ...EFFECTIVE_RUNTIME_NOISE_CONFIG,
     },
   },
   {
@@ -441,6 +516,7 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       resolution: '1920,1080',
       hardwareConcurrency: '8',
       webrtcPolicy: 'disable_non_proxied_udp',
+      ...EFFECTIVE_RUNTIME_NOISE_CONFIG,
     },
   },
   {
@@ -455,6 +531,7 @@ export const FINGERPRINT_PRESETS: FingerprintPreset[] = [
       resolution: '1440,900',
       hardwareConcurrency: '8',
       webrtcPolicy: 'disable_non_proxied_udp',
+      ...EFFECTIVE_RUNTIME_NOISE_CONFIG,
     },
   },
 ]

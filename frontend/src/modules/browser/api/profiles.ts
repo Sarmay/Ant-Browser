@@ -2,6 +2,7 @@ import { applyBrowserProfileCopyOptionsToArgs, createBrowserProfileCopyOptions }
 import { buildBrowserProfileCopyName } from '../copyName'
 import type {
   BrowserProfile,
+  BrowserFingerprintCapabilityReport,
   BrowserFingerprintCheckResult,
   BrowserProfileCopyOptions,
   BrowserProfileInput,
@@ -16,6 +17,36 @@ export async function fetchBrowserProfiles(): Promise<BrowserProfile[]> {
     return (await bindings.BrowserProfileList()) || []
   }
   return getMockProfiles().filter((profile) => !profile.deletedAt)
+}
+
+export async function fetchBrowserProfileFingerprintMatrix(
+  profileId: string,
+  coreId: string,
+  fingerprintArgs: string[],
+): Promise<BrowserFingerprintCapabilityReport> {
+  const bindings: any = await getBindings()
+  if (bindings?.BrowserProfileFingerprintMatrix) {
+    return await bindings.BrowserProfileFingerprintMatrix(profileId, coreId, fingerprintArgs || [])
+  }
+  return {
+    profileId,
+    coreId,
+    coreName: '',
+    chromeVersion: '',
+    chromeMajor: 0,
+    versionStatus: 'unknown',
+    rawArgs: fingerprintArgs || [],
+    launchArgs: fingerprintArgs || [],
+    rows: (fingerprintArgs || []).map(arg => ({
+      capability: arg.split('=')[0] || arg,
+      status: 'kept_unknown',
+      inputArg: arg,
+      runtimeArg: arg,
+      action: '保留',
+      note: '当前环境未连接后端，无法读取内核版本矩阵',
+    })),
+    warnings: ['当前环境未连接后端，矩阵仅展示原始参数'],
+  }
 }
 
 export async function checkBrowserProfileFingerprint(profileId: string): Promise<BrowserFingerprintCheckResult> {
@@ -34,6 +65,9 @@ export async function checkBrowserProfileFingerprint(profileId: string): Promise
       acceptLanguage: '',
       timezone: '',
       hardwareConcurrency: '',
+      deviceMemory: '',
+      colorDepth: '',
+      touchPoints: '',
       windowSize: '',
       brand: '',
       brandVersion: '',
@@ -42,6 +76,14 @@ export async function checkBrowserProfileFingerprint(profileId: string): Promise
       seed: '',
       disableSpoofing: '',
       webrtcPolicy: '',
+      doNotTrack: '',
+      mediaDevices: '',
+      canvasNoise: '',
+      audioNoise: '',
+      clientRectsNoise: '',
+      fontList: '',
+      webglVendor: '',
+      webglRenderer: '',
     },
     runtime: {
       language: navigator.language || '',
@@ -49,6 +91,9 @@ export async function checkBrowserProfileFingerprint(profileId: string): Promise
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
       hardwareConcurrency: navigator.hardwareConcurrency || 0,
       deviceMemory: (navigator as Navigator & { deviceMemory?: number }).deviceMemory || 0,
+      maxTouchPoints: navigator.maxTouchPoints || 0,
+      doNotTrack: navigator.doNotTrack || '',
+      mediaDeviceCount: 0,
       platform: navigator.platform || '',
       userAgent: navigator.userAgent || '',
       userAgentData: '',
@@ -58,6 +103,8 @@ export async function checkBrowserProfileFingerprint(profileId: string): Promise
       colorDepth: window.screen.colorDepth || 0,
       innerWidth: window.innerWidth || 0,
       innerHeight: window.innerHeight || 0,
+      outerWidth: window.outerWidth || 0,
+      outerHeight: window.outerHeight || 0,
       devicePixelRatio: window.devicePixelRatio || 0,
       webglVendor: '',
       webglRenderer: '',

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
-import { ConfirmModal, FormItem, Input, Select, Switch, Textarea } from '../../../shared/components'
+import { Button, ConfirmModal, FormItem, Input, Modal, Select, Switch, Textarea } from '../../../shared/components'
 import {
   type FingerprintConfig,
   FINGERPRINT_PRESETS,
@@ -107,6 +107,12 @@ const WEBRTC_OPTIONS = [
   { value: 'default_public_and_private_interfaces', label: '公网+私网接口' },
 ]
 
+const NOISE_OPTIONS = [
+  { value: '', label: '不设置' },
+  { value: '0', label: '关闭/0' },
+  { value: '1', label: '开启/1' },
+]
+
 const SPOOFING_OPTIONS = [
   { value: 'font', label: '字体' },
   { value: 'audio', label: '音频' },
@@ -129,6 +135,7 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
   const [config, setConfig] = useState<FingerprintConfig>(() => deserialize(value))
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [confirmSeedOpen, setConfirmSeedOpen] = useState(false)
+  const [capabilitiesOpen, setCapabilitiesOpen] = useState(false)
 
   useEffect(() => {
     setConfig(deserialize(value))
@@ -227,6 +234,29 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
         confirmText="确定重新生成"
       />
 
+      <Modal
+        open={capabilitiesOpen}
+        onClose={() => setCapabilitiesOpen(false)}
+        title="指纹能力覆盖"
+        width="860px"
+        footer={<Button variant="secondary" onClick={() => setCapabilitiesOpen(false)}>关闭</Button>}
+      >
+        <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
+          <div className="grid grid-cols-[120px_96px_minmax(0,1fr)] gap-3 px-3 py-2 text-xs font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)] bg-[var(--color-bg-hover)]">
+            <div>能力</div>
+            <div>模式</div>
+            <div>覆盖</div>
+          </div>
+          {FINGERPRINT_CAPABILITIES.map(item => (
+            <div key={item.id} className="grid grid-cols-[120px_96px_minmax(0,1fr)] gap-3 px-3 py-2 text-xs border-b last:border-b-0 border-[var(--color-border)]">
+              <div className="font-medium text-[var(--color-text-primary)]">{item.name}</div>
+              <div className="text-[var(--color-text-secondary)]">{capabilityModeLabel(item.mode)}</div>
+              <div className="text-[var(--color-text-muted)]">{item.coverage}</div>
+            </div>
+          ))}
+        </div>
+      </Modal>
+
       <FormItem label="快速预设">
         <Select value="" onChange={e => handlePresetChange(e.target.value)} options={PRESET_OPTIONS} />
       </FormItem>
@@ -235,19 +265,10 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
         <Select value="" onChange={e => handlePersonaChange(e.target.value)} options={PERSONA_OPTIONS} />
       </FormItem>
 
-      <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
-        <div className="grid grid-cols-[110px_88px_minmax(0,1fr)] gap-3 px-3 py-2 text-xs font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
-          <div>能力</div>
-          <div>模式</div>
-          <div>覆盖</div>
-        </div>
-        {FINGERPRINT_CAPABILITIES.map(item => (
-          <div key={item.id} className="grid grid-cols-[110px_88px_minmax(0,1fr)] gap-3 px-3 py-2 text-xs border-b last:border-b-0 border-[var(--color-border)]">
-            <div className="font-medium text-[var(--color-text-primary)]">{item.name}</div>
-            <div className="text-[var(--color-text-secondary)]">{capabilityModeLabel(item.mode)}</div>
-            <div className="text-[var(--color-text-muted)]">{item.coverage}</div>
-          </div>
-        ))}
+      <div className="flex justify-end">
+        <Button type="button" variant="secondary" size="sm" onClick={() => setCapabilitiesOpen(true)}>
+          查看能力覆盖
+        </Button>
       </div>
 
       <div>
@@ -267,6 +288,9 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
           </FormItem>
           <FormItem label="语言">
             <Select value={config.lang ?? ''} onChange={e => update({ lang: e.target.value || undefined, acceptLang: undefined })} options={LANG_OPTIONS} />
+          </FormItem>
+          <FormItem label="语言列表">
+            <Input value={config.acceptLang ?? ''} onChange={e => update({ acceptLang: e.target.value || undefined })} placeholder={config.lang ? `默认 ${config.lang.split(/[-_]/)[0] === config.lang ? config.lang : `${config.lang},${config.lang.split(/[-_]/)[0]}`}` : '如 ja-JP,ja'} />
           </FormItem>
           <FormItem label="时区">
             <Select
@@ -305,6 +329,18 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
       </div>
 
       <div>
+        <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">兼容细项</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormItem label="Canvas 噪声">
+            <Select value={config.canvasNoise ?? ''} onChange={e => update({ canvasNoise: e.target.value || undefined })} options={NOISE_OPTIONS} />
+          </FormItem>
+          <FormItem label="ClientRects 噪声">
+            <Select value={config.clientRectsNoise ?? ''} onChange={e => update({ clientRectsNoise: e.target.value || undefined })} options={NOISE_OPTIONS} />
+          </FormItem>
+        </div>
+      </div>
+
+      <div>
         <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">内核伪装</p>
         <div className="rounded-lg border border-[var(--color-border)] divide-y divide-[var(--color-border)]">
           <div className="px-3 py-2 text-sm text-[var(--color-text-secondary)]">
@@ -335,7 +371,7 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
         </button>
         {advancedOpen && (
           <div className="px-4 pb-4 pt-2 border-t border-[var(--color-border)]">
-            <p className="text-xs text-[var(--color-text-muted)] mb-2">仅保留当前内核已支持或未知的原始参数。</p>
+            <p className="text-xs text-[var(--color-text-muted)] mb-2">未建模参数会保留；本地实测无效的旧版细项保存时移除。</p>
             <Textarea
               value={advancedText}
               onChange={e => handleAdvancedChange(e.target.value)}
