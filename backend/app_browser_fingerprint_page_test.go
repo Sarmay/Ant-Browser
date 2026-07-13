@@ -118,6 +118,9 @@ func TestFingerprintCheckPageBuildsRuntimeBaseline(t *testing.T) {
 	if !strings.Contains(text, "实测无效") || !strings.Contains(text, "不可配置") || !strings.Contains(text, "不作为期望") {
 		t.Fatalf("generated page missing unsupported fingerprint labels")
 	}
+	if !strings.Contains(text, "compareBrowserVersionStatus") || !strings.Contains(text, "comparePlatformVersionStatus") || !strings.Contains(text, "口径匹配") {
+		t.Fatalf("generated page missing version comparison wording")
+	}
 	if !strings.Contains(text, "已配置") || !strings.Contains(text, "配置下发") || !strings.Contains(text, "效果看 Canvas Hash") || !strings.Contains(text, "效果看 ClientRects Hash") {
 		t.Fatalf("generated page missing unreadable launch switch labels")
 	}

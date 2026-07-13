@@ -597,6 +597,47 @@ function compareContainsStatus(expected, actual) {
   if (!hasExpected(expected)) return 'unknown';
   return String(actual || '').indexOf(String(expected)) >= 0 ? 'match' : 'mismatch';
 }
+function versionParts(value) {
+  var normalized = String(value || '').replace(/_/g, '.');
+  var match = normalized.match(/\d+(?:\.\d+)*/);
+  return match ? match[0].split('.').map(function (item) { return parseInt(item, 10); }).filter(function (item) { return !isNaN(item); }) : [];
+}
+function versionList(value, patterns) {
+  var text = String(value || '').replace(/_/g, '.');
+  var list = [];
+  patterns.forEach(function (pattern) {
+    var match;
+    while ((match = pattern.exec(text)) !== null) {
+      var parts = versionParts(match[1]);
+      if (parts.length) list.push(parts);
+    }
+  });
+  return list;
+}
+function sameVersionPrefix(left, right) {
+  if (!left.length || !right.length) return false;
+  var size = Math.min(left.length, right.length);
+  for (var index = 0; index < size; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
+}
+function compareBrowserVersionStatus(expected, actual) {
+  if (!hasExpected(expected)) return 'unknown';
+  if (compareContainsStatus(expected, actual) === 'match') return 'match';
+  var expectedParts = versionParts(expected);
+  if (!expectedParts.length) return 'mismatch';
+  var browserVersions = versionList(actual, [/(?:Chrome|Chromium|Edg|OPR|Vivaldi)\/([0-9]+(?:[._][0-9]+)*)/g, /"version"\s*:\s*"([0-9]+(?:[._][0-9]+)*)"/g]);
+  return browserVersions.some(function (actualParts) { return actualParts[0] === expectedParts[0]; }) ? 'compatible' : 'mismatch';
+}
+function comparePlatformVersionStatus(expected, actual) {
+  if (!hasExpected(expected)) return 'unknown';
+  if (compareContainsStatus(expected, actual) === 'match') return 'match';
+  var expectedParts = versionParts(expected);
+  if (!expectedParts.length) return 'mismatch';
+  var platformVersions = versionList(actual, [/Windows NT\s+([0-9]+(?:[._][0-9]+)*)/g, /Mac OS X\s+([0-9]+(?:[._][0-9]+)*)/g, /Android\s+([0-9]+(?:[._][0-9]+)*)/g, /(?:CPU (?:iPhone )?OS|iPhone OS)\s+([0-9]+(?:[._][0-9]+)*)/g, /"platformVersion"\s*:\s*"([0-9]+(?:[._][0-9]+)*)"/g]);
+  return platformVersions.some(function (actualParts) { return sameVersionPrefix(expectedParts, actualParts); }) ? 'compatible' : 'mismatch';
+}
 function normalizePlatformForCompare(value) {
   var normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return '';
@@ -618,6 +659,7 @@ function statusText(status, source) {
   if (source === '运行基线' && status === 'match') return '基线一致';
   if (source === '运行基线' && status === 'mismatch') return '基线变化';
   if (status === 'match') return '命中';
+  if (status === 'compatible') return '口径匹配';
   if (status === 'mismatch') return '未命中';
   if (status === 'warning') return '风险';
   if (status === 'unreadable') return '已配置';
@@ -628,6 +670,7 @@ function statusText(status, source) {
 }
 function statusClass(status, source) {
   if (status === 'match') return 'ok';
+  if (status === 'compatible') return 'ok';
   if (source === '效果观测' && status === 'mismatch') return 'warn';
   if (source === '运行基线' && status === 'mismatch') return 'warn';
   if (status === 'mismatch') return 'bad';
@@ -772,9 +815,9 @@ function buildFingerprintRows(report, context) {
   rows.push(observedFingerprintRow('窗口大小', context, 'windowSize', expected.windowSize, report.screen.outerWidth + ',' + report.screen.outerHeight, compareExactStatus, '比对 window.outerWidth/outerHeight'));
   rows.push(observedFingerprintRow('颜色深度', context, 'colorDepth', expected.colorDepth, report.screen.colorDepth, compareExactStatus, '比对 screen.colorDepth'));
   rows.push(fingerprintRow('品牌', expected.brand, report.identity.userAgent, compareContainsStatus(expected.brand, report.identity.userAgent), '比对 User-Agent 是否包含期望品牌'));
-  rows.push(observedFingerprintRow('品牌版本', context, 'brandVersion', expected.brandVersion, report.identity.userAgent, compareContainsStatus, '比对 User-Agent 是否包含期望版本'));
+  rows.push(observedFingerprintRow('品牌版本', context, 'brandVersion', expected.brandVersion, report.identity.userAgent, compareBrowserVersionStatus, '优先比对完整浏览器版本；User-Agent 只暴露主版本时按主版本口径匹配'));
   rows.push(fingerprintRow('平台', expected.platform, report.identity.platform, comparePlatformStatus(expected.platform, report.identity.platform), '比对 navigator.platform'));
-  rows.push(observedFingerprintRow('平台版本', context, 'platformVersion', expected.platformVersion, uaVersion, compareContainsStatus, '比对 User-Agent / UA-CH 是否包含期望系统版本'));
+  rows.push(observedFingerprintRow('平台版本', context, 'platformVersion', expected.platformVersion, uaVersion, comparePlatformVersionStatus, '优先比对完整系统版本；User-Agent / UA-CH 只暴露短版本时按可见版本前缀匹配'));
   rows.push(fingerprintRow('Webdriver', 'false', report.identity.webdriver ? 'true' : 'false', report.identity.webdriver ? 'mismatch' : 'match', '期望 navigator.webdriver 不暴露自动化', '内置期望'));
   var expectsWebRTCBlocked = hasExpected(expected.webrtcPolicy);
   rows.push(fingerprintRow('WebRTC Host', expectsWebRTCBlocked ? '0 host candidates' : '', report.network.localCandidateCount + ' host candidates', expectsWebRTCBlocked ? (report.network.localCandidateCount > 0 ? 'mismatch' : 'match') : 'unknown', expectsWebRTCBlocked ? '比对是否暴露本机 host candidate' : '未配置 WebRTC 期望，只展示实际采集值'));

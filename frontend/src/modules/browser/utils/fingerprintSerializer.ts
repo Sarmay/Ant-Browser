@@ -56,6 +56,39 @@ export interface FingerprintConfig {
 
 export const PRESET_RESOLUTIONS = ['1920,1080', '1440,900', '1366,768', '2560,1440', '1280,800', '1600,900']
 
+const DEFAULT_WINDOW_WIDTH_RATIO = 0.42
+const DEFAULT_WINDOW_MAX_WIDTH = 1440
+const DEFAULT_WINDOW_MIN_WIDTH = 960
+const DEFAULT_WINDOW_MIN_HEIGHT = 540
+const DEFAULT_WINDOW_FALLBACK_SCREEN_WIDTH = 1920
+const DEFAULT_WINDOW_FALLBACK_SCREEN_HEIGHT = 1080
+
+type WindowSizeScreenLike = Partial<Pick<Screen, 'availWidth' | 'availHeight' | 'width' | 'height'>>
+
+function positiveNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+export function buildAdaptiveDefaultWindowSize(screenInfo?: WindowSizeScreenLike): string {
+  const resolvedScreen = screenInfo ?? (typeof window !== 'undefined' ? window.screen : undefined)
+  const availableWidth = positiveNumber(resolvedScreen?.availWidth) || positiveNumber(resolvedScreen?.width) || DEFAULT_WINDOW_FALLBACK_SCREEN_WIDTH
+  const availableHeight = positiveNumber(resolvedScreen?.availHeight) || positiveNumber(resolvedScreen?.height) || DEFAULT_WINDOW_FALLBACK_SCREEN_HEIGHT
+  const width = Math.round(clampNumber(availableWidth * DEFAULT_WINDOW_WIDTH_RATIO, DEFAULT_WINDOW_MIN_WIDTH, DEFAULT_WINDOW_MAX_WIDTH))
+  const maxHeight = Math.max(DEFAULT_WINDOW_MIN_HEIGHT, Math.floor(availableHeight * 0.82))
+  const height = Math.round(clampNumber(width * 9 / 16, DEFAULT_WINDOW_MIN_HEIGHT, maxHeight))
+  return `${width},${height}`
+}
+
+export function withAdaptiveDefaultWindowSize(args: string[]): string[] {
+  const normalizedArgs = (args || []).map(item => item.trim()).filter(Boolean)
+  if (normalizedArgs.some(arg => arg.toLowerCase().startsWith('--window-size='))) return normalizedArgs
+  return [...normalizedArgs, `--window-size=${buildAdaptiveDefaultWindowSize()}`]
+}
+
 // CLI 参数前缀 → FingerprintConfig 字段映射
 export const KEY_MAP: Record<string, keyof FingerprintConfig> = {
   '--fingerprint': 'seed',
@@ -185,9 +218,13 @@ export function serialize(config: FingerprintConfig): string[] {
   }
   if (isEnabledFlagValue(config.canvasNoise)) {
     args.push('--fingerprinting-canvas-image-data-noise')
+  } else if (isDisabledFlagValue(config.canvasNoise)) {
+    args.push('--fingerprinting-canvas-image-data-noise=0')
   }
   if (isEnabledFlagValue(config.clientRectsNoise)) {
     args.push('--fingerprinting-client-rects-noise')
+  } else if (isDisabledFlagValue(config.clientRectsNoise)) {
+    args.push('--fingerprinting-client-rects-noise=0')
   }
   const disableSpoofing = normalizeDisableSpoofing(config.disableSpoofing)
   if (disableSpoofing.length) args.push(`--disable-spoofing=${disableSpoofing.join(',')}`)
@@ -324,6 +361,11 @@ export function validateFingerprintArgs(rawArgs: string[]): FingerprintValidatio
 function isEnabledFlagValue(value?: string): boolean {
   const normalized = String(value ?? '').trim().toLowerCase()
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on'
+}
+
+function isDisabledFlagValue(value?: string): boolean {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off'
 }
 
 function argKey(arg: string): string {

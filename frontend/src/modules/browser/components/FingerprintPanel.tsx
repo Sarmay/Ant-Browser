@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { ChevronDown, ChevronUp, HelpCircle, RefreshCw } from 'lucide-react'
 import { Button, ConfirmModal, FormItem, Input, Modal, Select, Switch, Textarea } from '../../../shared/components'
 import {
   type FingerprintConfig,
   FINGERPRINT_PRESETS,
   PRESET_RESOLUTIONS,
+  buildAcceptLanguage,
   buildFingerprintConfigFromPersona,
   deserialize,
   getSystemTimezone,
@@ -53,6 +54,21 @@ const LANG_OPTIONS = [
   { value: 'ru-RU', label: 'Русский (ru-RU)' },
   { value: 'pt-BR', label: 'Português Brasil (pt-BR)' },
 ]
+
+const BRAND_VERSION_OPTIONS = [
+  { value: '144.0.7559.132', label: '144.0.7559.132' },
+  { value: '143.0.7499.10', label: '143.0.7499.10' },
+  { value: '148.0.7778.215', label: '148.0.7778.215' },
+]
+
+const PLATFORM_VERSION_OPTIONS = [
+  { value: '10.0.0', label: 'Windows 10 / 10.0.0' },
+  { value: '15.2.0', label: 'macOS 15.2 / 15.2.0' },
+]
+
+const ACCEPT_LANG_OPTIONS = LANG_OPTIONS
+  .filter(option => option.value)
+  .map(option => ({ value: buildAcceptLanguage(option.value), label: buildAcceptLanguage(option.value) }))
 
 const TIMEZONE_OPTIONS = [
   { value: '', label: '不设置' },
@@ -108,9 +124,9 @@ const WEBRTC_OPTIONS = [
 ]
 
 const NOISE_OPTIONS = [
-  { value: '', label: '不设置' },
-  { value: '0', label: '关闭/0' },
-  { value: '1', label: '开启/1' },
+  { value: '', label: '默认（使用全局默认）' },
+  { value: '0', label: '显式关闭' },
+  { value: '1', label: '显式开启' },
 ]
 
 const SPOOFING_OPTIONS = [
@@ -131,9 +147,92 @@ const PERSONA_OPTIONS = [
   ...FINGERPRINT_PERSONAS.map(item => ({ value: item.id, label: item.name })),
 ]
 
+const ADVANCED_ARG_HELP_ROWS = [
+  { arg: '--fingerprint=<seed>', usage: '统一指纹种子；留空时启动按实例 ID 补稳定种子', example: '--fingerprint=123456' },
+  { arg: '--fingerprint-brand=<brand>', usage: '浏览器品牌；影响 UA / UA-CH 品牌口径', example: '--fingerprint-brand=Chrome' },
+  { arg: '--fingerprint-brand-version=<version>', usage: '浏览器版本；完整版本优先，检测时 UA 降级按主版本口径匹配', example: '--fingerprint-brand-version=144.0.7559.132' },
+  { arg: '--fingerprint-platform=<platform>', usage: '系统平台画像；支持 windows、macos、linux', example: '--fingerprint-platform=windows' },
+  { arg: '--fingerprint-platform-version=<version>', usage: '系统版本；检测时按 UA / UA-CH 可见版本前缀匹配', example: '--fingerprint-platform-version=10.0.0' },
+  { arg: '--lang=<locale>', usage: '主语言；同时会补默认 Accept-Language', example: '--lang=ja-JP' },
+  { arg: '--accept-lang=<list>', usage: '语言列表；逗号分隔，按 navigator.languages 前缀比对', example: '--accept-lang=ja-JP,ja' },
+  { arg: '--timezone=<iana>', usage: '时区；使用 IANA 时区名', example: '--timezone=Asia/Tokyo' },
+  { arg: '--window-size=<w,h>', usage: '启动窗口外框尺寸；检测比对 outerWidth/outerHeight', example: '--window-size=1600,900' },
+  { arg: '--fingerprint-hardware-concurrency=<n>', usage: 'CPU 核心数；1 到 128 的整数', example: '--fingerprint-hardware-concurrency=8' },
+  { arg: '--disable-non-proxied-udp', usage: 'WebRTC 防泄漏；禁用非代理 UDP', example: '--disable-non-proxied-udp' },
+  { arg: '--webrtc-ip-handling-policy=<policy>', usage: 'WebRTC 策略；用于更细的 IP 暴露控制', example: '--webrtc-ip-handling-policy=default_public_interface_only' },
+  { arg: '--fingerprinting-canvas-image-data-noise', usage: '启用 Canvas ImageData 噪声；页面只能观察 Canvas Hash', example: '--fingerprinting-canvas-image-data-noise' },
+  { arg: '--fingerprinting-client-rects-noise', usage: '启用 ClientRects 噪声；页面只能观察 ClientRects Hash', example: '--fingerprinting-client-rects-noise' },
+  { arg: '--disable-spoofing=<items>', usage: '禁用指定伪装项；可选 font、audio、canvas、clientrects、gpu', example: '--disable-spoofing=font,audio' },
+]
+
+interface EditableOptionInputProps {
+  value: string
+  onChange: (value: string) => void
+  options: { value: string; label: string }[]
+  placeholder?: string
+}
+
+interface FingerprintSectionProps {
+  title: string
+  children: ReactNode
+}
+
+function FingerprintSection({ title, children }: FingerprintSectionProps) {
+  return (
+    <section className="rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-bg-subtle)] p-4 shadow-[var(--shadow-xs)] space-y-4">
+      <h4 className="text-xs font-medium text-[var(--color-text-muted)] uppercase tracking-wide">{title}</h4>
+      {children}
+    </section>
+  )
+}
+
+function EditableOptionInput({ value, onChange, options, placeholder }: EditableOptionInputProps) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="relative">
+      <Input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        placeholder={placeholder}
+        className="pr-9"
+      />
+      <button
+        type="button"
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+        onMouseDown={e => e.preventDefault()}
+        onClick={() => setOpen(current => !current)}
+      >
+        <ChevronDown className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] shadow-lg">
+          {options.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)]"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => {
+                onChange(option.value)
+                setOpen(false)
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
   const [config, setConfig] = useState<FingerprintConfig>(() => deserialize(value))
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [advancedHelpOpen, setAdvancedHelpOpen] = useState(false)
   const [confirmSeedOpen, setConfirmSeedOpen] = useState(false)
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false)
 
@@ -257,40 +356,65 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
         </div>
       </Modal>
 
-      <FormItem label="快速预设">
-        <Select value="" onChange={e => handlePresetChange(e.target.value)} options={PRESET_OPTIONS} />
-      </FormItem>
+      <Modal
+        open={advancedHelpOpen}
+        onClose={() => setAdvancedHelpOpen(false)}
+        title="原始参数使用方式"
+        width="980px"
+        footer={<Button variant="secondary" onClick={() => setAdvancedHelpOpen(false)}>关闭</Button>}
+      >
+        <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
+          <div className="grid grid-cols-[220px_minmax(0,1fr)_minmax(220px,0.8fr)] gap-3 px-3 py-2 text-xs font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)] bg-[var(--color-bg-hover)]">
+            <div>参数</div>
+            <div>用途</div>
+            <div>示例</div>
+          </div>
+          {ADVANCED_ARG_HELP_ROWS.map(row => (
+            <div key={row.arg} className="grid grid-cols-[220px_minmax(0,1fr)_minmax(220px,0.8fr)] gap-3 px-3 py-2 text-xs border-b last:border-b-0 border-[var(--color-border)]">
+              <code className="break-all text-[var(--color-text-primary)]">{row.arg}</code>
+              <div className="text-[var(--color-text-secondary)]">{row.usage}</div>
+              <code className="break-all text-[var(--color-text-muted)]">{row.example}</code>
+            </div>
+          ))}
+        </div>
+      </Modal>
 
-      <FormItem label="高级画像">
-        <Select value="" onChange={e => handlePersonaChange(e.target.value)} options={PERSONA_OPTIONS} />
-      </FormItem>
+      <FingerprintSection title="快速生成">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormItem label="快速预设">
+            <Select value="" onChange={e => handlePresetChange(e.target.value)} options={PRESET_OPTIONS} />
+          </FormItem>
 
-      <div className="flex justify-end">
-        <Button type="button" variant="secondary" size="sm" onClick={() => setCapabilitiesOpen(true)}>
-          查看能力覆盖
-        </Button>
-      </div>
+          <FormItem label="高级画像">
+            <Select value="" onChange={e => handlePersonaChange(e.target.value)} options={PERSONA_OPTIONS} />
+          </FormItem>
+        </div>
+        <div className="flex justify-end">
+          <Button type="button" variant="secondary" size="sm" onClick={() => setCapabilitiesOpen(true)}>
+            查看能力覆盖
+          </Button>
+        </div>
+      </FingerprintSection>
 
-      <div>
-        <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">身份与定位</p>
+      <FingerprintSection title="身份与定位">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="浏览器品牌">
             <Select value={config.brand ?? ''} onChange={e => update({ brand: e.target.value || undefined })} options={BRAND_OPTIONS} />
           </FormItem>
           <FormItem label="品牌版本">
-            <Input value={config.brandVersion ?? ''} onChange={e => update({ brandVersion: e.target.value || undefined })} placeholder="默认跟随内核" />
+            <EditableOptionInput value={config.brandVersion ?? ''} onChange={nextValue => update({ brandVersion: nextValue || undefined })} options={BRAND_VERSION_OPTIONS} placeholder="默认跟随内核" />
           </FormItem>
           <FormItem label="平台">
             <Select value={config.platform ?? ''} onChange={e => update({ platform: e.target.value || undefined })} options={PLATFORM_OPTIONS} />
           </FormItem>
           <FormItem label="系统版本">
-            <Input value={config.platformVersion ?? ''} onChange={e => update({ platformVersion: e.target.value || undefined })} placeholder="如 15.2.0" />
+            <EditableOptionInput value={config.platformVersion ?? ''} onChange={nextValue => update({ platformVersion: nextValue || undefined })} options={PLATFORM_VERSION_OPTIONS} placeholder="如 15.2.0" />
           </FormItem>
           <FormItem label="语言">
             <Select value={config.lang ?? ''} onChange={e => update({ lang: e.target.value || undefined, acceptLang: undefined })} options={LANG_OPTIONS} />
           </FormItem>
           <FormItem label="语言列表">
-            <Input value={config.acceptLang ?? ''} onChange={e => update({ acceptLang: e.target.value || undefined })} placeholder={config.lang ? `默认 ${config.lang.split(/[-_]/)[0] === config.lang ? config.lang : `${config.lang},${config.lang.split(/[-_]/)[0]}`}` : '如 ja-JP,ja'} />
+            <EditableOptionInput value={config.acceptLang ?? ''} onChange={nextValue => update({ acceptLang: nextValue || undefined })} options={ACCEPT_LANG_OPTIONS} placeholder={config.lang ? `默认 ${config.lang.split(/[-_]/)[0] === config.lang ? config.lang : `${config.lang},${config.lang.split(/[-_]/)[0]}`}` : '如 ja-JP,ja'} />
           </FormItem>
           <FormItem label="时区">
             <Select
@@ -300,10 +424,9 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
             />
           </FormItem>
         </div>
-      </div>
+      </FingerprintSection>
 
-      <div>
-        <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">窗口与硬件</p>
+      <FingerprintSection title="设备与网络">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="窗口大小">
             <Select value={config.resolution ?? ''} onChange={e => update({ resolution: e.target.value || undefined })} options={RESOLUTION_OPTIONS} />
@@ -316,20 +439,13 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
           <FormItem label="CPU 核心数">
             <Select value={config.hardwareConcurrency ?? ''} onChange={e => update({ hardwareConcurrency: e.target.value || undefined })} options={HARDWARE_CONCURRENCY_OPTIONS} />
           </FormItem>
-        </div>
-      </div>
-
-      <div>
-        <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">网络</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="WebRTC 策略">
             <Select value={config.webrtcPolicy ?? ''} onChange={e => update({ webrtcPolicy: e.target.value || undefined })} options={WEBRTC_OPTIONS} />
           </FormItem>
         </div>
-      </div>
+      </FingerprintSection>
 
-      <div>
-        <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">兼容细项</p>
+      <FingerprintSection title="兼容伪装">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="Canvas 噪声">
             <Select value={config.canvasNoise ?? ''} onChange={e => update({ canvasNoise: e.target.value || undefined })} options={NOISE_OPTIONS} />
@@ -338,18 +454,16 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
             <Select value={config.clientRectsNoise ?? ''} onChange={e => update({ clientRectsNoise: e.target.value || undefined })} options={NOISE_OPTIONS} />
           </FormItem>
         </div>
-      </div>
 
-      <div>
-        <p className="text-xs font-medium text-[var(--color-text-muted)] mb-2 uppercase tracking-wide">内核伪装</p>
-        <div className="rounded-lg border border-[var(--color-border)] divide-y divide-[var(--color-border)]">
-          <div className="px-3 py-2 text-sm text-[var(--color-text-secondary)]">
-            种子会启用音频、字体、Canvas、ClientRects、GPU 等内核级伪装；这里仅用于排除某项伪装。
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-3 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-medium text-[var(--color-text-primary)]">禁用某项伪装</div>
+            <div className="text-xs text-[var(--color-text-muted)]">关闭开关 = 保持伪装</div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
             {SPOOFING_OPTIONS.map(option => (
-              <label key={option.value} className="flex items-center justify-between gap-3 px-3 py-2 text-sm text-[var(--color-text-primary)] border-t md:border-t-0 md:border-r last:border-r-0 border-[var(--color-border)]">
-                <span>{option.label}</span>
+              <label key={option.value} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-bg-subtle)] px-3 py-2 text-sm text-[var(--color-text-primary)]">
+                <span>禁用 {option.label}</span>
                 <Switch
                   checked={(config.disableSpoofing ?? []).includes(option.value)}
                   onChange={checked => toggleDisableSpoofing(option.value, checked)}
@@ -358,7 +472,7 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
             ))}
           </div>
         </div>
-      </div>
+      </FingerprintSection>
 
       <div className="border border-[var(--color-border)] rounded-lg overflow-hidden">
         <button
@@ -366,7 +480,28 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
           className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-bg-hover)] transition-colors"
           onClick={() => setAdvancedOpen(v => !v)}
         >
-          <span>高级模式（原始参数）</span>
+          <span className="inline-flex items-center gap-2">
+            <span>高级模式（原始参数）</span>
+            <span
+              role="button"
+              tabIndex={0}
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[var(--color-text-muted)] hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-text-primary)]"
+              onClick={event => {
+                event.stopPropagation()
+                setAdvancedHelpOpen(true)
+              }}
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setAdvancedHelpOpen(true)
+                }
+              }}
+              aria-label="查看原始参数使用方式"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </span>
+          </span>
           {advancedOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
         {advancedOpen && (

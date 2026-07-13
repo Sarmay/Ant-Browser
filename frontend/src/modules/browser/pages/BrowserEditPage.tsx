@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { FolderOpen, HelpCircle, Layers, ShieldCheck } from 'lucide-react'
+import { ChevronDown, ChevronUp, FolderOpen, HelpCircle, Layers, ShieldCheck } from 'lucide-react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Textarea, toast } from '../../../shared/components'
 import type { BrowserCore, BrowserFingerprintCapabilityReport, BrowserFingerprintCapabilityRow, BrowserFingerprintCheckResult, BrowserProfileInput, BrowserProxy, BrowserGroup, ProxyLocationResolveResult } from '../types'
 import { browserProxyResolveLocation, checkBrowserProfileFingerprint, createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfileFingerprintMatrix, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, openBrowserFingerprintCheck, openUserDataDir, updateBrowserProfile, validateProxyConfig } from '../api'
 import { FingerprintPanel } from '../components/FingerprintPanel'
-import { applyLocaleToFingerprintArgs, validateFingerprintArgs } from '../utils/fingerprintSerializer'
+import { applyLocaleToFingerprintArgs, validateFingerprintArgs, withAdaptiveDefaultWindowSize } from '../utils/fingerprintSerializer'
 import { TagInput } from '../components/TagInput'
 import { GroupSelector } from '../components/GroupSelector'
 import { ProxyPickerModal } from '../components/ProxyPickerModal'
@@ -34,7 +34,8 @@ function displayValue(value: unknown): string {
   return String(value)
 }
 
-type FingerprintMatchMode = 'exact' | 'contains' | 'platform' | 'display'
+type FingerprintMatchMode = 'exact' | 'contains' | 'platform' | 'browser-version' | 'platform-version' | 'display'
+type FingerprintMatchStatus = 'match' | 'version_compatible' | 'mismatch' | 'not_configured' | 'observe'
 
 function normalizeFingerprintPlatformForMatch(value: unknown): string {
   const normalized = String(value ?? '').trim().toLowerCase()
@@ -45,14 +46,48 @@ function normalizeFingerprintPlatformForMatch(value: unknown): string {
   return normalized
 }
 
-function matchStatus(expected: unknown, actual: unknown, mode: FingerprintMatchMode = 'exact'): 'match' | 'mismatch' | 'unknown' {
-  if (mode === 'display') return 'unknown'
-  if (expected === undefined || expected === null || expected === '') return 'unknown'
+function versionParts(value: unknown): number[] {
+  const match = String(value ?? '').replace(/_/g, '.').match(/\d+(?:\.\d+)*/)
+  return match ? match[0].split('.').map(item => Number.parseInt(item, 10)).filter(Number.isFinite) : []
+}
+
+function versionList(value: unknown, patterns: RegExp[]): number[][] {
+  const text = String(value ?? '').replace(/_/g, '.')
+  return patterns.flatMap(pattern => Array.from(text.matchAll(pattern), match => versionParts(match[1])).filter(parts => parts.length > 0))
+}
+
+function sameVersionPrefix(left: number[], right: number[]): boolean {
+  if (!left.length || !right.length) return false
+  const size = Math.min(left.length, right.length)
+  return left.slice(0, size).every((part, index) => part === right[index])
+}
+
+function matchBrowserVersionStatus(expected: unknown, actual: unknown): FingerprintMatchStatus {
+  if (String(actual ?? '').includes(String(expected))) return 'match'
+  const expectedParts = versionParts(expected)
+  if (!expectedParts.length) return 'mismatch'
+  const versions = versionList(actual, [/(?:Chrome|Chromium|Edg|OPR|Vivaldi)\/([0-9]+(?:[._][0-9]+)*)/g, /"version"\s*:\s*"([0-9]+(?:[._][0-9]+)*)"/g])
+  return versions.some(actualParts => actualParts[0] === expectedParts[0]) ? 'version_compatible' : 'mismatch'
+}
+
+function matchPlatformVersionStatus(expected: unknown, actual: unknown): FingerprintMatchStatus {
+  if (String(actual ?? '').includes(String(expected))) return 'match'
+  const expectedParts = versionParts(expected)
+  if (!expectedParts.length) return 'mismatch'
+  const versions = versionList(actual, [/Windows NT\s+([0-9]+(?:[._][0-9]+)*)/g, /Mac OS X\s+([0-9]+(?:[._][0-9]+)*)/g, /Android\s+([0-9]+(?:[._][0-9]+)*)/g, /(?:CPU (?:iPhone )?OS|iPhone OS)\s+([0-9]+(?:[._][0-9]+)*)/g, /"platformVersion"\s*:\s*"([0-9]+(?:[._][0-9]+)*)"/g])
+  return versions.some(actualParts => sameVersionPrefix(expectedParts, actualParts)) ? 'version_compatible' : 'mismatch'
+}
+
+function matchStatus(expected: unknown, actual: unknown, mode: FingerprintMatchMode = 'exact'): FingerprintMatchStatus {
+  if (mode === 'display') return 'observe'
+  if (expected === undefined || expected === null || expected === '') return 'not_configured'
   if (mode === 'platform') {
     const expectedPlatform = normalizeFingerprintPlatformForMatch(expected)
     const actualPlatform = normalizeFingerprintPlatformForMatch(actual)
     return expectedPlatform && expectedPlatform === actualPlatform ? 'match' : 'mismatch'
   }
+  if (mode === 'browser-version') return matchBrowserVersionStatus(expected, actual)
+  if (mode === 'platform-version') return matchPlatformVersionStatus(expected, actual)
   if (Array.isArray(actual)) {
     const expectedItems = String(expected).split(',').map(item => item.trim()).filter(Boolean)
     const actualItems = actual.map(item => String(item).trim()).filter(Boolean)
@@ -64,8 +99,8 @@ function matchStatus(expected: unknown, actual: unknown, mode: FingerprintMatchM
 
 function FingerprintCheckRow({ label, expected, actual, mode }: { label: string; expected?: unknown; actual: unknown; mode?: FingerprintMatchMode }) {
   const status = matchStatus(expected, actual, mode)
-  const statusText = status === 'match' ? '一致' : status === 'mismatch' ? '不一致' : '仅展示'
-  const statusClass = status === 'match'
+  const statusText = status === 'match' ? '一致' : status === 'version_compatible' ? '口径匹配' : status === 'mismatch' ? '不一致' : status === 'not_configured' ? '未设期望' : '观察值'
+  const statusClass = status === 'match' || status === 'version_compatible'
     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
     : status === 'mismatch'
       ? 'bg-amber-50 text-amber-700 border-amber-200'
@@ -230,6 +265,8 @@ export function BrowserEditPage() {
   const [fingerprintCheckOpen, setFingerprintCheckOpen] = useState(false)
   const [fingerprintMatrix, setFingerprintMatrix] = useState<BrowserFingerprintCapabilityReport | null>(null)
   const [fingerprintMatrixOpen, setFingerprintMatrixOpen] = useState(false)
+  const [launchArgsOpen, setLaunchArgsOpen] = useState(false)
+  const [launchArgsHelpOpen, setLaunchArgsHelpOpen] = useState(false)
 
   useEffect(() => {
     const loadData = async () => {
@@ -253,7 +290,7 @@ export function BrowserEditPage() {
           ...prev,
           proxyId: resolved.proxyId || directProxyID,
           proxyConfig: '',
-          fingerprintArgs: settings.defaultFingerprintArgs || [],
+          fingerprintArgs: withAdaptiveDefaultWindowSize(settings.defaultFingerprintArgs || []),
         }))
         setLaunchArgsText(resolvedDefaultLaunchArgs.join('\n'))
         return
@@ -492,7 +529,6 @@ export function BrowserEditPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">{isCreate ? '新建配置' : '编辑配置'}</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">完善指纹与启动参数</p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" size="sm" onClick={handleBack}>返回列表</Button>
@@ -500,7 +536,7 @@ export function BrowserEditPage() {
         </div>
       </div>
 
-      <Card title="基础信息" subtitle="实例与配置名称">
+      <Card title="基础配置">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="配置名称" required>
             <Input value={formData.profileName} onChange={e => handleChange('profileName', e.target.value)} placeholder="请输入配置名称" />
@@ -552,8 +588,8 @@ export function BrowserEditPage() {
         </div>
       </Card>
 
-      <Card title="代理配置" subtitle="支持代理池节点或本地代理地址">
-        <div className="grid grid-cols-1 gap-4">
+      <Card title="代理与定位">
+        <div className="grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)] gap-4 items-start">
           <FormItem label="代理来源">
             <Select
               value={proxyMode}
@@ -566,7 +602,7 @@ export function BrowserEditPage() {
           </FormItem>
           {proxyMode === 'pool' ? (
             <FormItem label="代理地址选择">
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Select
                   value={formData.proxyId}
                   onChange={e => { handleChange('proxyId', e.target.value); setLocationResult(null) }}
@@ -575,14 +611,15 @@ export function BrowserEditPage() {
                       ? proxies.map(p => ({ value: p.proxyId, label: p.proxyName || p.proxyId }))
                       : [{ value: '', label: '暂无代理，请先到代理池创建' }]
                   }
-                  className="flex-1"
+                  className="flex-1 min-w-0"
                 />
-                <Button variant="secondary" size="sm" onClick={() => setProxyPickerOpen(true)} title="按分组选择代理">
+                <Button variant="secondary" size="sm" className="shrink-0" onClick={() => setProxyPickerOpen(true)} title="按分组选择代理">
                   <Layers className="w-4 h-4" />
                 </Button>
                 <Button
                   variant="secondary"
                   size="sm"
+                  className="shrink-0"
                   onClick={handleApplyProxyLocation}
                   loading={locationResolving}
                   disabled={!formData.proxyId || formData.proxyId === directProxyID}
@@ -624,68 +661,132 @@ export function BrowserEditPage() {
         onClose={() => setProxyPickerOpen(false)}
       />
 
-      <Card title="指纹配置" subtitle="配置浏览器指纹参数">
-        <div className="flex justify-end gap-2 mb-3">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => setFingerprintMatrixOpen(true)}
-            title="查看版本适配矩阵"
-            aria-label="查看版本适配矩阵"
-          >
-            <HelpCircle className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleOpenFingerprintPage}
-            loading={fingerprintPageOpening}
-            disabled={isCreate}
-          >
-            浏览器内检测
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleFingerprintCheck}
-            loading={fingerprintChecking}
-            disabled={isCreate}
-          >
-            <ShieldCheck className="w-4 h-4" />
-            自测当前实例
-          </Button>
-        </div>
+      <Card
+        title="指纹配置"
+        actions={(
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setFingerprintMatrixOpen(true)}
+              title="查看版本适配矩阵"
+              aria-label="查看版本适配矩阵"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleOpenFingerprintPage}
+              loading={fingerprintPageOpening}
+              disabled={isCreate}
+            >
+              浏览器内检测
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleFingerprintCheck}
+              loading={fingerprintChecking}
+              disabled={isCreate}
+            >
+              <ShieldCheck className="w-4 h-4" />
+              自测当前实例
+            </Button>
+          </>
+        )}
+      >
         <FingerprintPanel
           value={formData.fingerprintArgs}
           onChange={args => handleChange('fingerprintArgs', args)}
         />
       </Card>
 
-      <Card title="启动参数" subtitle={isCreate ? '新建时默认填入轻量参数模板，直接改这里即可' : '每行一个参数'}>
-        <div className="space-y-2">
-          <Textarea
-            value={launchArgsText}
-            onChange={e => { setLaunchArgsText(e.target.value); setIsDirty(true) }}
-            rows={6}
-            placeholder="--disable-sync"
-          />
-          {isCreate && (
-            <p className="text-xs text-[var(--color-text-muted)]">这里默认就是轻量参数模板；需要更复杂的参数，直接在此基础上修改。</p>
-          )}
-          {!isCreate && formData.lastLaunchArgs && formData.lastLaunchArgs.length > 0 && (
-            <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
-              <div className="px-3 py-2 text-xs font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)]">上次实际启动参数</div>
-              <Textarea
-                value={formData.lastLaunchArgs.join('\n')}
-                readOnly
-                rows={6}
-                className="border-0 rounded-none bg-[var(--color-bg-hover)] font-mono text-xs"
-              />
-            </div>
-          )}
-        </div>
+      <Card padding="none">
+        <button
+          type="button"
+          className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-[var(--color-bg-hover)] transition-colors"
+          onClick={() => setLaunchArgsOpen(current => !current)}
+        >
+          <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]">
+            <span>高级启动参数</span>
+            <span
+              role="button"
+              tabIndex={0}
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[var(--color-text-muted)] hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-text-primary)]"
+              onClick={event => {
+                event.stopPropagation()
+                setLaunchArgsHelpOpen(true)
+              }}
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setLaunchArgsHelpOpen(true)
+                }
+              }}
+              aria-label="查看高级启动参数说明"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </span>
+          </span>
+          {launchArgsOpen ? <ChevronUp className="w-4 h-4 text-[var(--color-text-muted)]" /> : <ChevronDown className="w-4 h-4 text-[var(--color-text-muted)]" />}
+        </button>
+        {launchArgsOpen && (
+          <div className="space-y-3 px-5 pb-5 border-t border-[var(--color-border-muted)] pt-4">
+            <Textarea
+              value={launchArgsText}
+              onChange={e => { setLaunchArgsText(e.target.value); setIsDirty(true) }}
+              rows={6}
+              placeholder="--disable-sync"
+            />
+            {!isCreate && formData.lastLaunchArgs && formData.lastLaunchArgs.length > 0 && (
+              <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
+                <div className="px-3 py-2 text-xs font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)]">上次实际启动参数</div>
+                <Textarea
+                  value={formData.lastLaunchArgs.join('\n')}
+                  readOnly
+                  rows={6}
+                  className="border-0 rounded-none bg-[var(--color-bg-hover)] font-mono text-xs"
+                />
+              </div>
+            )}
+          </div>
+        )}
       </Card>
+
+      <Modal
+        open={launchArgsHelpOpen}
+        onClose={() => setLaunchArgsHelpOpen(false)}
+        title="高级启动参数说明"
+        width="920px"
+        footer={<Button variant="secondary" onClick={() => setLaunchArgsHelpOpen(false)}>关闭</Button>}
+      >
+        <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
+          <div className="grid grid-cols-[220px_minmax(0,1fr)_minmax(180px,0.7fr)] gap-3 px-3 py-2 text-xs font-medium text-[var(--color-text-muted)] border-b border-[var(--color-border)] bg-[var(--color-bg-hover)]">
+            <div>参数</div>
+            <div>含义</div>
+            <div>示例</div>
+          </div>
+          {[
+            ['--disable-sync', '关闭 Chrome 同步，减少账号和同步服务干扰。', '--disable-sync'],
+            ['--no-first-run', '跳过首次运行向导，启动更干净。', '--no-first-run'],
+            ['--start-maximized', '启动后最大化窗口；会影响窗口大小检测口径。', '--start-maximized'],
+            ['--disable-background-networking', '减少后台网络请求；可能影响部分 Chrome 服务。', '--disable-background-networking'],
+            ['--disable-features=<list>', '关闭指定 Chromium Feature；仅在明确知道影响时使用。', '--disable-features=Translate'],
+            ['--enable-features=<list>', '开启指定 Chromium Feature；仅在明确知道影响时使用。', '--enable-features=NetworkService'],
+            ['不建议手填', '指纹、代理、用户数据目录、调试端口属于托管参数，会由页面配置和后端启动流程生成。', '--user-data-dir / --proxy-server / --remote-debugging-port'],
+            ['上次实际启动参数', '只读记录，展示最终启动 Chrome 的完整参数，可用于排查后端自动补齐内容。', '下方只读区域'],
+          ].map(([arg, meaning, example]) => (
+            <div key={arg} className="grid grid-cols-[220px_minmax(0,1fr)_minmax(180px,0.7fr)] gap-3 px-3 py-2 text-xs border-b last:border-b-0 border-[var(--color-border)]">
+              <code className="break-all text-[var(--color-text-primary)]">{arg}</code>
+              <div className="text-[var(--color-text-secondary)]">{meaning}</div>
+              <code className="break-all text-[var(--color-text-muted)]">{example}</code>
+            </div>
+          ))}
+        </div>
+      </Modal>
 
       <ConfirmModal
         open={leaveConfirm}
@@ -723,8 +824,8 @@ export function BrowserEditPage() {
               <FingerprintDisplayRow label="Do Not Track" actual={fingerprintCheckResult.runtime.doNotTrack} />
               <FingerprintCheckRow label="窗口大小" expected={fingerprintCheckResult.expected.windowSize} actual={`${fingerprintCheckResult.runtime.outerWidth},${fingerprintCheckResult.runtime.outerHeight}`} />
               <FingerprintCheckRow label="平台" expected={fingerprintCheckResult.expected.platform} actual={fingerprintCheckResult.runtime.platform} mode="platform" />
-              <FingerprintCheckRow label="品牌版本" expected={fingerprintCheckResult.expected.brandVersion} actual={fingerprintCheckResult.runtime.userAgent} mode="contains" />
-              <FingerprintCheckRow label="系统版本" expected={fingerprintCheckResult.expected.platformVersion} actual={fingerprintCheckResult.runtime.userAgent} mode="contains" />
+              <FingerprintCheckRow label="品牌版本" expected={fingerprintCheckResult.expected.brandVersion} actual={fingerprintCheckResult.runtime.userAgent} mode="browser-version" />
+              <FingerprintCheckRow label="系统版本" expected={fingerprintCheckResult.expected.platformVersion} actual={fingerprintCheckResult.runtime.userAgent} mode="platform-version" />
               <FingerprintCheckRow label="UA" expected={fingerprintCheckResult.expected.brand} actual={fingerprintCheckResult.runtime.userAgent} mode="contains" />
               <FingerprintDisplayRow label="UA Data" actual={fingerprintCheckResult.runtime.userAgentData} />
               <FingerprintCheckRow label="Webdriver" expected={false} actual={fingerprintCheckResult.runtime.webdriver} />

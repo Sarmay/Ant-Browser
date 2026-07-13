@@ -7,8 +7,8 @@ func TestDefaultScriptBundles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultScriptBundles returned error: %v", err)
 	}
-	if len(bundles) != 5 {
-		t.Fatalf("expected five default script bundles, got %d", len(bundles))
+	if len(bundles) != 7 {
+		t.Fatalf("expected seven default script bundles, got %d", len(bundles))
 	}
 
 	expected := []struct {
@@ -45,6 +45,18 @@ func TestDefaultScriptBundles(t *testing.T) {
 			id:        LianjiaWHHomeStep1ScriptID,
 			name:      "链家武汉首页 S1 打开页面",
 			uri:       "repo://backend/internal/automation/demo-library/lianjia-wh-home-step1",
+			publicAPI: "",
+		},
+		{
+			id:        LianjiaWHCookiePrepareID,
+			name:      "链家武汉 Cookie 准备",
+			uri:       "repo://backend/internal/automation/demo-library/lianjia-wh-cookie-prepare",
+			publicAPI: "",
+		},
+		{
+			id:        BeikeHousePriceExtractID,
+			name:      "贝壳二手房价格提取",
+			uri:       "repo://backend/internal/automation/demo-library/beike-house-price-extract",
 			publicAPI: "",
 		},
 	}
