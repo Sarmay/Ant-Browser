@@ -274,16 +274,22 @@ func buildBrowserFingerprintLaunchPlan(profileId string, rawArgs []string, chrom
 
 		if key == "--disable-spoofing" {
 			disableSpoofingValues = appendUniqueStringValues(disableSpoofingValues, splitCSV(browserArgValue([]string{arg}, key))...)
+			runtimeArg := arg
+			if len(disableSpoofingValues) > 0 {
+				runtimeArg = "--disable-spoofing=" + strings.Join(disableSpoofingValues, ",")
+			}
 			if disableSpoofingIndex < 0 {
 				disableSpoofingIndex = len(plan.launchArgs)
-				plan.launchArgs = append(plan.launchArgs, arg)
+				plan.launchArgs = append(plan.launchArgs, runtimeArg)
+			} else {
+				plan.launchArgs[disableSpoofingIndex] = runtimeArg
 			}
 			if !convertedDisableGPU {
 				plan.rows = append(plan.rows, BrowserFingerprintCapabilityRow{
 					Capability: "排除伪装",
 					Status:     "kept",
 					InputArg:   arg,
-					RuntimeArg: arg,
+					RuntimeArg: runtimeArg,
 					Action:     "保留",
 					Note:       "由内核按指定能力关闭伪装",
 				})

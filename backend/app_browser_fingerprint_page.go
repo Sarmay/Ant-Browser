@@ -342,11 +342,11 @@ const fingerprintCheckHTML = `<!doctype html>
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
     h1 { margin: 0; font-size: 22px; }
     .meta { color: #6b7280; font-size: 13px; margin-top: 4px; }
-    .actions { display: flex; gap: 8px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     button { border: 1px solid #111827; background: #111827; color: #fff; border-radius: 8px; height: 34px; padding: 0 12px; cursor: pointer; }
     button.secondary { background: #fff; color: #111827; }
     .grid { display: block; }
-    section { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow-x: auto; }
+    section { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow-x: auto; margin-bottom: 14px; }
     h2 { margin: 0; padding: 11px 13px; font-size: 14px; border-bottom: 1px solid #e5e7eb; background: #fafafa; }
     table { width: 100%; min-width: 1280px; border-collapse: collapse; }
     th, td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; font-size: 13px; text-align: left; }
@@ -365,6 +365,10 @@ const fingerprintCheckHTML = `<!doctype html>
     .bad { color: #b91c1c; }
     .muted { color: #64748b; }
     .summary { display: none; }
+    .flow { margin-bottom: 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .flow-step { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #334155; }
+    .flow-step strong { display: block; color: #111827; margin-bottom: 3px; }
+    .diff-empty { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; color: #475569; font-size: 13px; margin-bottom: 14px; }
     pre { margin: 0; padding: 12px; white-space: pre-wrap; word-break: break-all; font-size: 12px; }
   </style>
 </head>
@@ -377,17 +381,26 @@ const fingerprintCheckHTML = `<!doctype html>
     </div>
     <div class="actions">
       <button class="secondary" id="resetBaselineBtn">重建基线</button>
+      <button class="secondary" id="saveBeforeBtn">保存修改前快照</button>
+      <button class="secondary" id="clearBeforeBtn">清除修改前快照</button>
       <button class="secondary" id="refreshBtn">重新检测</button>
       <button id="copyBtn">复制 JSON</button>
     </div>
   </header>
+  <div class="flow">
+    <div class="flow-step"><strong>1 保存修改前</strong>旧配置启动后检测，点保存修改前快照。</div>
+    <div class="flow-step"><strong>2 修改并重启</strong>改 Seed 或指纹配置后，关闭实例再启动。</div>
+    <div class="flow-step"><strong>3 重新检测</strong>进入本页点重新检测，看修改前后变化。</div>
+  </div>
   <div class="summary" id="summary"></div>
+  <div id="changeApp"></div>
   <div class="grid" id="app"></div>
 </main>
 <script>
 var latestReport = null;
 var latestContext = __FINGERPRINT_CHECK_CONTEXT__;
 var fingerprintCheckRunning = false;
+var latestBeforeSnapshot = null;
 var FINGERPRINT_AUTO_REFRESH_MS = 60 * 60 * 1000;
 var FINGERPRINT_AUTO_REFRESH_CHECK_MS = 60 * 1000;
 function hashString(input) {
@@ -738,6 +751,33 @@ function cloneObservedValue(value) {
 function sameObservedValue(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
+function changeSnapshotStorageKey(context) {
+  var profileId = context && context.profileId ? context.profileId : 'unknown';
+  return 'ant:fingerprint-check:change-before:' + profileId;
+}
+function loadBeforeSnapshot(context) {
+  try {
+    latestBeforeSnapshot = JSON.parse(localStorage.getItem(changeSnapshotStorageKey(context)) || 'null');
+  } catch (e) {
+    latestBeforeSnapshot = null;
+  }
+}
+function saveBeforeSnapshot(context, report) {
+  if (!report) return;
+  latestBeforeSnapshot = JSON.parse(JSON.stringify({
+    context: context || {},
+    report: report
+  }));
+  try {
+    localStorage.setItem(changeSnapshotStorageKey(context), JSON.stringify(latestBeforeSnapshot));
+  } catch (e) {}
+}
+function clearBeforeSnapshot(context) {
+  latestBeforeSnapshot = null;
+  try {
+    localStorage.removeItem(changeSnapshotStorageKey(context));
+  } catch (e) {}
+}
 function baselineValue(context, key, actual) {
   if (Object.prototype.hasOwnProperty.call(latestBaseline, key)) return latestBaseline[key];
   if (!hasObservedValue(actual)) return '';
@@ -848,6 +888,67 @@ function renderFingerprintTable(rows) {
     return '<tr><td class="item">' + escapeHtml(item.name) + '</td><td>' + pairValue(item.expected, item.actual) + '</td><td class="source">' + escapeHtml(item.source) + '</td><td class="hit ' + statusClass(item.status, item.source) + '">' + statusText(item.status, item.source) + '</td><td class="reason">' + escapeHtml(reason) + '</td></tr>';
   }).join('') + '</tbody></table></section>';
 }
+function valueAtPath(source, path) {
+  return path.split('.').reduce(function (current, key) {
+    return current && Object.prototype.hasOwnProperty.call(current, key) ? current[key] : undefined;
+  }, source);
+}
+function beforeSnapshotReport(snapshot) {
+  return snapshot && snapshot.report ? snapshot.report : snapshot;
+}
+function beforeSnapshotContext(snapshot) {
+  return snapshot && snapshot.context ? snapshot.context : {};
+}
+function displayObservedValue(value) {
+  if (value === undefined || value === null || value === '') return '-';
+  if (Array.isArray(value)) return value.join(', ');
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+var changeCompareFields = [
+  ['配置 Seed', 'context.expected.seed'],
+  ['Canvas Hash', 'advanced.canvasHash'],
+  ['Audio Hash', 'advanced.audioHash'],
+  ['ClientRects Hash', 'advanced.clientRectsHash'],
+  ['Fonts Hash', 'advanced.fontHash'],
+  ['Detected Fonts', 'advanced.detectedFonts'],
+  ['WebGL Vendor', 'advanced.webglVendor'],
+  ['WebGL Renderer', 'advanced.webglRenderer'],
+  ['WebGL Hash', 'advanced.webglHash'],
+  ['Plugins', 'advanced.plugins'],
+  ['MIME Types', 'advanced.mimeTypes'],
+  ['屏幕尺寸', 'screen.width'],
+  ['屏幕高度', 'screen.height'],
+  ['DPR', 'screen.devicePixelRatio'],
+  ['语言', 'locale.language'],
+  ['语言列表', 'locale.languages'],
+  ['时区', 'locale.timezone'],
+  ['CPU 核心', 'hardware.hardwareConcurrency'],
+  ['设备内存', 'hardware.deviceMemory'],
+  ['触控点', 'hardware.maxTouchPoints'],
+  ['User-Agent', 'identity.userAgent'],
+  ['Platform', 'identity.platform']
+];
+function renderChangeComparison(report) {
+  var target = document.getElementById('changeApp');
+  if (!latestBeforeSnapshot) {
+    target.innerHTML = '<div class="diff-empty">未保存修改前快照。要看改 Seed 后哪些项变化：先在旧配置下点“保存修改前快照”，改配置并重启实例后再点“重新检测”。</div>';
+    return;
+  }
+  var beforeReport = beforeSnapshotReport(latestBeforeSnapshot) || {};
+  var beforeContext = beforeSnapshotContext(latestBeforeSnapshot);
+  var beforeCompareSource = Object.assign({}, beforeReport, { context: beforeContext });
+  var currentCompareSource = Object.assign({}, report || {}, { context: latestContext || {} });
+  var beforeTime = beforeReport.generatedAt ? formatLocalDateTime(beforeReport.generatedAt) : '-';
+  var currentTime = report && report.generatedAt ? formatLocalDateTime(report.generatedAt) : '-';
+  var rows = changeCompareFields.map(function (field) {
+    var beforeValue = valueAtPath(beforeCompareSource, field[1]);
+    var currentValue = valueAtPath(currentCompareSource, field[1]);
+    var changed = !sameObservedValue(beforeValue, currentValue);
+    return '<tr><td class="item">' + escapeHtml(field[0]) + '</td><td>' + pairValue(displayObservedValue(beforeValue), displayObservedValue(currentValue)) + '</td><td class="source">修改前后</td><td class="hit ' + (changed ? 'warn' : 'ok') + '">' + (changed ? '已变化' : '未变化') + '</td><td class="reason">' + escapeHtml('修改前 ' + beforeTime + ' / 当前 ' + currentTime) + '</td></tr>';
+  }).join('');
+  target.innerHTML = '<section><h2>修改前后变化</h2><table><thead><tr><th>指纹项</th><th>值</th><th>来源</th><th>结果</th><th>时间</th></tr></thead><tbody>' + rows + '</tbody></table></section>';
+}
 function padDatePart(value) { return String(value).padStart(2, '0'); }
 function formatLocalDateTime(isoText) {
   var date = new Date(isoText);
@@ -870,6 +971,7 @@ function render(report) {
   report.rows = rows;
   renderMeta(report);
   document.getElementById('summary').innerHTML = '';
+  renderChangeComparison(report);
   document.getElementById('app').innerHTML = renderFingerprintTable(rows);
 }
 async function run() {
@@ -887,12 +989,15 @@ function maybeAutoRefresh() {
   if (reportAgeMs(latestReport) >= FINGERPRINT_AUTO_REFRESH_MS) run();
 }
 document.getElementById('resetBaselineBtn').onclick = function () { resetFingerprintBaseline(latestContext); run(); };
+document.getElementById('saveBeforeBtn').onclick = function () { saveBeforeSnapshot(latestContext, latestReport); renderChangeComparison(latestReport); };
+document.getElementById('clearBeforeBtn').onclick = function () { clearBeforeSnapshot(latestContext); renderChangeComparison(latestReport); };
 document.getElementById('refreshBtn').onclick = run;
 document.getElementById('copyBtn').onclick = function () {
   if (!latestReport) return;
   navigator.clipboard.writeText(JSON.stringify(latestReport, null, 2)).catch(function () {});
 };
 setInterval(maybeAutoRefresh, FINGERPRINT_AUTO_REFRESH_CHECK_MS);
+loadBeforeSnapshot(latestContext);
 run();
 </script>
 </body>

@@ -20,6 +20,16 @@ func TestBuildBrowserFingerprintLaunchPlanChrome144ConvertsRemovedGPUArgs(t *tes
 	assertRowsContainStatus(t, plan.rows, "GPU 伪装开关", "converted")
 }
 
+func TestBuildBrowserFingerprintLaunchPlanMergesMultipleDisableSpoofingArgs(t *testing.T) {
+	plan := buildBrowserFingerprintLaunchPlan("profile-a", []string{
+		"--fingerprint=123",
+		"--disable-spoofing=canvas,audio",
+		"--disable-spoofing=font,clientrects",
+	}, "144.0.7559.132")
+
+	assertArgsContain(t, plan.launchArgs, "--disable-spoofing=canvas,audio,font,clientrects")
+}
+
 func TestBuildBrowserFingerprintLaunchPlanChrome143KeepsGPUArgs(t *testing.T) {
 	plan := buildBrowserFingerprintLaunchPlan("profile-a", []string{
 		"--fingerprint=123",

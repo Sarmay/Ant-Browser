@@ -109,6 +109,15 @@ func TestFingerprintCheckPageBuildsRuntimeBaseline(t *testing.T) {
 	if !strings.Contains(text, "效果观测") || !strings.Contains(text, "观测变化") || !strings.Contains(text, "不等于配置失败") {
 		t.Fatalf("generated page missing fingerprint effect observation labels")
 	}
+	if !strings.Contains(text, "保存修改前快照") || !strings.Contains(text, "修改前后变化") || !strings.Contains(text, "changeSnapshotStorageKey") {
+		t.Fatalf("generated page missing before/after change comparison")
+	}
+	if !strings.Contains(text, "改配置并重启实例") || !strings.Contains(text, "已变化") || !strings.Contains(text, "未变化") || !strings.Contains(text, "配置 Seed") {
+		t.Fatalf("generated page missing before/after change guidance")
+	}
+	if !strings.Contains(text, "beforeSnapshotReport") || !strings.Contains(text, "beforeSnapshotContext") || !strings.Contains(text, "context.expected.seed") {
+		t.Fatalf("generated page missing before/after context comparison")
+	}
 	if !strings.Contains(text, "未建立观测基线") || !strings.Contains(text, "改过指纹配置或 Seed 后，先重建基线再刷新验证稳定性") {
 		t.Fatalf("generated page missing effect observation baseline guidance")
 	}
