@@ -73,6 +73,12 @@ func TestEnsureFingerprintCheckPageURL(t *testing.T) {
 	if !strings.Contains(text, "FINGERPRINT_AUTO_REFRESH_MS = 60 * 60 * 1000") || !strings.Contains(text, "maybeAutoRefresh") || !strings.Contains(text, "setInterval(maybeAutoRefresh") {
 		t.Fatalf("generated page missing one-hour auto refresh")
 	}
+	if !strings.Contains(text, "resolveIPAttribution") || !strings.Contains(text, "Location Conflict") || !strings.Contains(text, "Source Details") || !strings.Contains(text, "rdap.db.ripe.net") {
+		t.Fatalf("generated page missing multi-source proxy attribution")
+	}
+	if strings.Contains(text, "ipapi.co/json") {
+		t.Fatalf("generated page still uses old single-source ipapi.co fallback")
+	}
 }
 
 func TestFingerprintCheckPageBuildsRuntimeBaseline(t *testing.T) {

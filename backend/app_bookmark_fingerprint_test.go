@@ -3,6 +3,8 @@ package backend
 import (
 	"ant-chrome/backend/internal/browser"
 	"ant-chrome/backend/internal/config"
+	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -111,5 +113,51 @@ func TestRuntimeBookmarksForProfileUsesFileURL(t *testing.T) {
 	}
 	if len(bookmarks) != 2 || bookmarks[0].URL != fingerprintURL || bookmarks[1].URL != "https://ping0.cc/" {
 		t.Fatalf("bookmarks = %#v, fingerprintURL = %q", bookmarks, fingerprintURL)
+	}
+}
+
+func TestRuntimeBookmarksForProfileIncludesProxyContext(t *testing.T) {
+	app := NewApp(t.TempDir())
+	app.config = &config.Config{}
+	app.browserMgr = browser.NewManager(app.config, app.appRoot)
+	app.config.Browser.Proxies = []browser.Proxy{
+		{
+			ProxyId:     "proxy-auth",
+			ProxyName:   "Auth Proxy",
+			ProxyConfig: "http://ant:secret-pass@127.0.0.1:18080",
+			GroupName:   "Auth Group",
+		},
+	}
+	app.browserMgr.Profiles["profile-proxy-bookmark"] = &browser.Profile{
+		ProfileId:   "profile-proxy-bookmark",
+		ProxyId:     "proxy-auth",
+		ProxyConfig: "http://ant:secret-pass@127.0.0.1:18080",
+	}
+
+	_, fingerprintURL, err := app.runtimeBookmarksForProfile("profile-proxy-bookmark", []BrowserBookmark{{Name: "指纹检测", URL: fingerprintCheckBookmarkURL}})
+	if err != nil {
+		t.Fatalf("runtimeBookmarksForProfile error = %v", err)
+	}
+	parsed, err := url.Parse(fingerprintURL)
+	if err != nil {
+		t.Fatalf("parse fingerprint URL error = %v", err)
+	}
+	pagePath, err := url.PathUnescape(parsed.Path)
+	if err != nil {
+		t.Fatalf("decode fingerprint page path error = %v", err)
+	}
+	if len(pagePath) >= 3 && pagePath[0] == '/' && pagePath[2] == ':' {
+		pagePath = pagePath[1:]
+	}
+	content, err := os.ReadFile(pagePath)
+	if err != nil {
+		t.Fatalf("read fingerprint page error = %v", err)
+	}
+	text := string(content)
+	if !strings.Contains(text, `"proxyName": "Auth Proxy"`) || !strings.Contains(text, `"hasAuth": true`) {
+		t.Fatalf("fingerprint page missing proxy context: %s", text)
+	}
+	if strings.Contains(text, "secret-pass") {
+		t.Fatalf("fingerprint page leaked proxy password: %s", text)
 	}
 }

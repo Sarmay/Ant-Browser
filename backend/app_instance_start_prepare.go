@@ -224,7 +224,7 @@ func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *Brow
 
 	fingerprintLaunchArgs := a.buildBrowserFingerprintCapabilityReport(input.ProfileID, profile.CoreId, profile.FingerprintArgs).LaunchArgs
 	fingerprintExpectedArgs := combineFingerprintExpectedArgs(fingerprintLaunchArgs, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs)
-	runtimeBookmarks, fingerprintBookmarkURL, bookmarkErr := a.runtimeBookmarksForProfileExpectedArgs(profile.ProfileId, fingerprintExpectedArgs, bookmarks)
+	runtimeBookmarks, fingerprintBookmarkURL, bookmarkErr := a.runtimeBookmarksForProfileExpectedArgsAndProfile(profile.ProfileId, fingerprintExpectedArgs, profile, bookmarks)
 	if bookmarkErr != nil {
 		log.Error("指纹检测书签生成失败", logger.F("profile_id", input.ProfileID), logger.F("error", bookmarkErr.Error()))
 		runtimeBookmarks = bookmarks

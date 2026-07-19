@@ -189,7 +189,8 @@ func (a *App) BookmarkSyncToProfiles() BookmarkSyncResult {
 		}
 
 		userDataDir := a.browserMgr.ResolveUserDataDir(profile)
-		runtimeBookmarks, fingerprintBookmarkURL, err := a.runtimeBookmarksForProfile(profile.ProfileId, bookmarks)
+		expectedArgs := a.fingerprintCheckExpectedArgsFromProfile(profile)
+		runtimeBookmarks, fingerprintBookmarkURL, err := a.runtimeBookmarksForProfileExpectedArgsAndProfile(profile.ProfileId, expectedArgs, profile, bookmarks)
 		if err != nil {
 			result.Failed++
 			name := profile.ProfileName

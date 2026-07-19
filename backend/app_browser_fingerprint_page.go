@@ -176,16 +176,18 @@ func (a *App) resolveFingerprintCheckStartURLsForExpectedArgsAndProfile(profileI
 }
 
 func (a *App) runtimeBookmarksForProfile(profileId string, bookmarks []BrowserBookmark) ([]BrowserBookmark, string, error) {
-	expectedArgs, err := a.fingerprintCheckProfileExpectedArgs(profileId)
+	profile, err := a.fingerprintCheckProfileSnapshot(profileId)
 	if err != nil {
 		return nil, "", err
 	}
-	return a.runtimeBookmarksForProfileExpectedArgs(profileId, expectedArgs, bookmarks)
+	expectedArgs := a.fingerprintCheckExpectedArgsFromProfile(profile)
+	return a.runtimeBookmarksForProfileExpectedArgsAndProfile(profileId, expectedArgs, profile, bookmarks)
 }
 
 func (a *App) runtimeBookmarksForProfileData(profileId string, coreId string, fingerprintArgs []string, bookmarks []BrowserBookmark) ([]BrowserBookmark, string, error) {
 	expectedArgs := a.buildFingerprintCheckExpectedArgs(profileId, coreId, fingerprintArgs, nil)
-	return a.runtimeBookmarksForProfileExpectedArgs(profileId, expectedArgs, bookmarks)
+	profile, _ := a.fingerprintCheckProfileSnapshot(profileId)
+	return a.runtimeBookmarksForProfileExpectedArgsAndProfile(profileId, expectedArgs, profile, bookmarks)
 }
 
 func (a *App) runtimeBookmarksForProfileExpectedArgs(profileId string, expectedArgs []string, bookmarks []BrowserBookmark) ([]BrowserBookmark, string, error) {
@@ -516,6 +518,7 @@ const fingerprintCheckHTML = `<!doctype html>
     .proxy-status.ok { color: #047857; background: #ecfdf5; }
     .proxy-status.warn { color: #b45309; background: #fffbeb; }
     .proxy-status.bad { color: #b91c1c; background: #fef2f2; }
+    .proxy-source-list { line-height: 1.55; }
     pre { margin: 0; padding: 12px; white-space: pre-wrap; word-break: break-all; font-size: 12px; }
   </style>
 </head>
@@ -631,6 +634,10 @@ var UI_ZH = {
   'Group': '分组',
   'Current IP': '当前 IP',
   'Location': '归属地',
+  'Reference Location': '参考归属',
+  'Confidence': '置信度',
+  'ASN/Network': 'ASN/网络',
+  'Source Details': '来源明细',
   'ISP/Org': '运营商/组织',
   'Latency': '耗时',
   'Status': '状态',
@@ -638,6 +645,17 @@ var UI_ZH = {
   'Yes': '有',
   'No': '无',
   'Detected': '已检测',
+  'Majority Match': '多数一致',
+  'Country Majority': '国家/地区多数一致',
+  'Location Conflict': '归属地冲突',
+  'Single Source': '单源',
+  'Location conflict': '归属地存在冲突',
+  'No location consensus': '无一致归属',
+  'No source detail': '无来源明细',
+  'No ASN': '无 ASN',
+  'Datacenter': '机房',
+  'Proxy/VPN': '代理/VPN',
+  'IPXO/Rented Segment': 'IPXO/租赁段',
   'Detection Failed': '检测失败',
   'Not Checked': '未检测',
   'No proxy configured': '未配置代理',
@@ -857,21 +875,113 @@ async function webrtcCandidates() {
     });
   }, []);
 }
-function normalizePublicIPPayload(source, data) {
+var COUNTRY_NAMES = {
+  AD: 'Andorra', AE: 'United Arab Emirates', AF: 'Afghanistan', AG: 'Antigua and Barbuda', AI: 'Anguilla', AL: 'Albania', AM: 'Armenia', AO: 'Angola', AR: 'Argentina', AT: 'Austria', AU: 'Australia', AW: 'Aruba', AZ: 'Azerbaijan', BA: 'Bosnia and Herzegovina', BB: 'Barbados', BD: 'Bangladesh', BE: 'Belgium', BF: 'Burkina Faso', BG: 'Bulgaria', BH: 'Bahrain', BI: 'Burundi', BJ: 'Benin', BM: 'Bermuda', BN: 'Brunei', BO: 'Bolivia', BR: 'Brazil', BS: 'Bahamas', BT: 'Bhutan', BW: 'Botswana', BY: 'Belarus', BZ: 'Belize', CA: 'Canada', CD: 'Democratic Republic of the Congo', CF: 'Central African Republic', CG: 'Republic of the Congo', CH: 'Switzerland', CI: 'Ivory Coast', CL: 'Chile', CM: 'Cameroon', CN: 'China', CO: 'Colombia', CR: 'Costa Rica', CU: 'Cuba', CV: 'Cape Verde', CY: 'Cyprus', CZ: 'Czechia', DE: 'Germany', DJ: 'Djibouti', DK: 'Denmark', DM: 'Dominica', DO: 'Dominican Republic', DZ: 'Algeria', EC: 'Ecuador', EE: 'Estonia', EG: 'Egypt', ES: 'Spain', ET: 'Ethiopia', EU: 'EU', FI: 'Finland', FJ: 'Fiji', FR: 'France', GA: 'Gabon', GB: 'United Kingdom', GD: 'Grenada', GE: 'Georgia', GH: 'Ghana', GM: 'Gambia', GN: 'Guinea', GQ: 'Equatorial Guinea', GR: 'Greece', GT: 'Guatemala', HK: 'Hong Kong', HN: 'Honduras', HR: 'Croatia', HT: 'Haiti', HU: 'Hungary', ID: 'Indonesia', IE: 'Ireland', IL: 'Israel', IN: 'India', IQ: 'Iraq', IR: 'Iran', IS: 'Iceland', IT: 'Italy', JM: 'Jamaica', JO: 'Jordan', JP: 'Japan', KE: 'Kenya', KG: 'Kyrgyzstan', KH: 'Cambodia', KR: 'South Korea', KW: 'Kuwait', KZ: 'Kazakhstan', LA: 'Laos', LB: 'Lebanon', LK: 'Sri Lanka', LR: 'Liberia', LT: 'Lithuania', LU: 'Luxembourg', LV: 'Latvia', LY: 'Libya', MA: 'Morocco', MD: 'Moldova', ME: 'Montenegro', MG: 'Madagascar', MK: 'North Macedonia', ML: 'Mali', MM: 'Myanmar', MN: 'Mongolia', MO: 'Macau', MR: 'Mauritania', MT: 'Malta', MU: 'Mauritius', MV: 'Maldives', MW: 'Malawi', MX: 'Mexico', MY: 'Malaysia', MZ: 'Mozambique', NA: 'Namibia', NE: 'Niger', NG: 'Nigeria', NI: 'Nicaragua', NL: 'Netherlands', NO: 'Norway', NP: 'Nepal', NZ: 'New Zealand', OM: 'Oman', PA: 'Panama', PE: 'Peru', PH: 'Philippines', PK: 'Pakistan', PL: 'Poland', PR: 'Puerto Rico', PT: 'Portugal', PY: 'Paraguay', QA: 'Qatar', RO: 'Romania', RS: 'Serbia', RU: 'Russia', RW: 'Rwanda', SA: 'Saudi Arabia', SE: 'Sweden', SG: 'Singapore', SI: 'Slovenia', SK: 'Slovakia', SN: 'Senegal', SO: 'Somalia', SV: 'El Salvador', SY: 'Syria', TH: 'Thailand', TJ: 'Tajikistan', TM: 'Turkmenistan', TN: 'Tunisia', TR: 'Turkey', TT: 'Trinidad and Tobago', TW: 'Taiwan', TZ: 'Tanzania', UA: 'Ukraine', UG: 'Uganda', US: 'United States', UY: 'Uruguay', UZ: 'Uzbekistan', VE: 'Venezuela', VN: 'Vietnam', YE: 'Yemen', ZA: 'South Africa', ZM: 'Zambia', ZW: 'Zimbabwe'
+};
+var COUNTRY_NAME_TO_CODE = {
+  'belgium': 'BE', 'china': 'CN', 'hong kong': 'HK', 'hong kong sar': 'HK', 'macau': 'MO', 'macao': 'MO', 'taiwan': 'TW', 'united states': 'US', 'united states of america': 'US', 'usa': 'US', 'us': 'US', 'eu': 'EU', 'european union': 'EU'
+};
+var SOURCE_LOCATION_PRIORITY = { 'ipinfo.io': 90, 'ipapi.is': 75, 'ipwho.is': 60 };
+function cleanString(value) {
+  return String(value || '').trim();
+}
+function normalizeCountryCode(country, code) {
+  var rawCode = cleanString(code || '').toUpperCase();
+  if (/^[A-Z]{2}$/.test(rawCode)) return rawCode;
+  var text = cleanString(country || '').toLowerCase();
+  return COUNTRY_NAME_TO_CODE[text] || '';
+}
+function countryNameFor(code, fallback) {
+  var normalized = cleanString(code).toUpperCase();
+  return COUNTRY_NAMES[normalized] || cleanString(fallback);
+}
+function normalizeRegionName(value) {
+  var text = cleanString(value);
+  if (/^HK-/.test(text.toUpperCase())) return 'Hong Kong';
+  return text;
+}
+function normalizePublicIPPayload(source, data, targetIP) {
   data = data || {};
   if (source === 'ipwho.is' && data.success === false) throw new Error(data.message || 'ipwho.is failed');
+  if (source === 'ipinfo.io' && data.bogon === true) throw new Error('bogon ip');
   var connection = data.connection || {};
-  var ip = data.ip || data.query || '';
-  var country = data.country || data.country_name || '';
-  var region = data.region || data.regionName || data.region_name || '';
-  var city = data.city || '';
-  var org = connection.org || connection.isp || data.org || data.isp || data.asn_org || '';
+  var location = data.location || {};
+  var asnData = data.asn || {};
+  var company = data.company || {};
+  var datacenter = data.datacenter || {};
+  var ip = cleanString(data.ip || data.query || targetIP || '');
+  var country = '';
+  var countryCode = '';
+  var region = '';
+  var city = '';
+  var org = '';
+  var asn = '';
+  var network = '';
+  var route = '';
+  var netname = '';
+  var kind = 'geo';
+  var isDatacenter = false;
+  var isProxy = false;
+  var isVPN = false;
+  if (source === 'ipinfo.io') {
+    countryCode = normalizeCountryCode('', data.country);
+    country = countryNameFor(countryCode, data.country);
+    region = normalizeRegionName(data.region);
+    city = cleanString(data.city);
+    org = cleanString(data.org);
+    asn = org.replace(/^AS(\d+).*$/i, '$1');
+    if (asn === org) asn = '';
+  } else if (source === 'ipapi.is') {
+    country = cleanString(location.country);
+    countryCode = normalizeCountryCode(country, location.country_code);
+    country = countryNameFor(countryCode, country);
+    region = normalizeRegionName(location.state || location.region);
+    city = cleanString(location.city);
+    org = cleanString(asnData.descr || company.name || datacenter.datacenter);
+    asn = cleanString(asnData.asn);
+    network = cleanString(company.network || datacenter.network);
+    route = cleanString(asnData.route);
+    netname = cleanString(company.netname);
+    isDatacenter = data.is_datacenter === true || !!datacenter.datacenter;
+    isProxy = data.is_proxy === true;
+    isVPN = data.is_vpn === true;
+  } else if (source === 'rdap.ripe') {
+    kind = 'network';
+    countryCode = normalizeCountryCode('', data.country);
+    country = countryNameFor(countryCode, data.country);
+    network = cleanString(data.handle || ([data.startAddress, data.endAddress].filter(Boolean).join(' - ')));
+    route = data.cidr0_cidrs && data.cidr0_cidrs.length ? String(data.cidr0_cidrs[0].v4prefix || data.cidr0_cidrs[0].v6prefix || '') + '/' + String(data.cidr0_cidrs[0].length || '') : '';
+    netname = cleanString(data.name);
+    org = cleanString(data.name);
+  } else if (source === 'ipify') {
+    kind = 'ip';
+  } else {
+    country = cleanString(data.country || data.country_name);
+    countryCode = normalizeCountryCode(country, data.country_code || data.countryCode);
+    country = countryNameFor(countryCode, country);
+    region = normalizeRegionName(data.region || data.regionName || data.region_name);
+    city = cleanString(data.city);
+    org = cleanString(connection.org || connection.isp || data.org || data.isp || data.asn_org);
+    asn = cleanString(connection.asn || data.asn);
+  }
+  var rentedOrIpXO = /ipxo/i.test([netname, network, org, route].join(' '));
   return {
+    ok: !!ip,
     ip: ip,
     country: country,
+    countryCode: countryCode,
     region: region,
     city: city,
     org: org,
+    asn: asn,
+    network: network,
+    route: route,
+    netname: netname,
+    datacenter: isDatacenter,
+    proxy: isProxy,
+    vpn: isVPN,
+    rentedOrIpXO: rentedOrIpXO,
+    kind: kind,
     source: source
   };
 }
@@ -900,27 +1010,191 @@ function fetchJSONWithTimeout(url, timeoutMs) {
   });
 }
 async function collectPublicIPInfo() {
-  var endpoints = [
-    ['ipwho.is', 'https://ipwho.is/'],
-    ['ipapi.co', 'https://ipapi.co/json/'],
-    ['ipify', 'https://api.ipify.org?format=json']
+  var currentEndpoints = [
+    { source: 'ipwho.is', url: 'https://ipwho.is/' },
+    { source: 'ipinfo.io', url: 'https://ipinfo.io/json' },
+    { source: 'ipapi.is', url: 'https://api.ipapi.is/' },
+    { source: 'ipify', url: 'https://api.ipify.org?format=json' }
   ];
-  var lastError = '';
-  for (var index = 0; index < endpoints.length; index += 1) {
-    var source = endpoints[index][0];
-    var startedAt = Date.now();
-    try {
-      var payload = await fetchJSONWithTimeout(endpoints[index][1], 6500);
-      var info = normalizePublicIPPayload(source, payload);
-      info.ok = !!info.ip;
-      info.latencyMs = Date.now() - startedAt;
-      if (!info.ok) throw new Error('empty ip');
-      return info;
-    } catch (error) {
-      lastError = source + ': ' + (error && error.message ? error.message : String(error || 'failed'));
-    }
+  var currentResults = await Promise.all(currentEndpoints.map(function (endpoint) {
+    return fetchPublicIPSource(endpoint);
+  }));
+  var targetIP = pickConsensusIP(currentResults);
+  if (!targetIP) return buildPublicIPFailure(currentResults);
+  var detailEndpoints = [
+    { source: 'ipwho.is', url: 'https://ipwho.is/' + encodeURIComponent(targetIP), targetIP: targetIP },
+    { source: 'ipinfo.io', url: 'https://ipinfo.io/' + encodeURIComponent(targetIP) + '/json', targetIP: targetIP },
+    { source: 'ipapi.is', url: 'https://api.ipapi.is/?q=' + encodeURIComponent(targetIP), targetIP: targetIP },
+    { source: 'rdap.ripe', url: 'https://rdap.db.ripe.net/ip/' + encodeURIComponent(targetIP), targetIP: targetIP }
+  ];
+  var detailResults = await Promise.all(detailEndpoints.map(function (endpoint) {
+    return fetchPublicIPSource(endpoint);
+  }));
+  return resolveIPAttribution(targetIP, mergeIPAttributionResults(detailResults, currentResults, targetIP));
+}
+async function fetchPublicIPSource(endpoint) {
+  var startedAt = Date.now();
+  try {
+    var payload = await fetchJSONWithTimeout(endpoint.url, endpoint.timeoutMs || (endpoint.source === 'rdap.ripe' ? 4500 : 6500));
+    var info = normalizePublicIPPayload(endpoint.source, payload, endpoint.targetIP || '');
+    info.latencyMs = Date.now() - startedAt;
+    if (!info.ok) throw new Error('empty ip');
+    return info;
+  } catch (error) {
+    return { ok: false, source: endpoint.source, ip: endpoint.targetIP || '', kind: endpoint.source === 'rdap.ripe' ? 'network' : 'geo', latencyMs: Date.now() - startedAt, error: error && error.message ? error.message : String(error || 'failed') };
   }
-  return { ok: false, source: '', ip: '', country: '', region: '', city: '', org: '', latencyMs: 0, error: lastError || 'Public IP service unavailable' };
+}
+function mergeIPAttributionResults(detailResults, currentResults, targetIP) {
+  var bySource = {};
+  var merged = (detailResults || []).slice();
+  merged.forEach(function (item) { if (item && item.source) bySource[item.source] = item; });
+  (currentResults || []).forEach(function (item) {
+    if (!item || !item.source) return;
+    if (item.source === 'ipify') {
+      merged.push(item);
+      return;
+    }
+    if (!item.ok || item.ip !== targetIP) return;
+    if (!bySource[item.source] || bySource[item.source].ok !== true) {
+      if (bySource[item.source]) merged = merged.filter(function (existing) { return existing.source !== item.source; });
+      merged.push(item);
+      bySource[item.source] = item;
+    }
+  });
+  return merged;
+}
+function pickConsensusIP(results) {
+  var counts = {};
+  var first = '';
+  (results || []).forEach(function (item) {
+    if (!item || !item.ok || !item.ip) return;
+    var ip = item.ip;
+    if (!first) first = ip;
+    counts[ip] = (counts[ip] || 0) + 1;
+  });
+  return Object.keys(counts).sort(function (left, right) { return counts[right] - counts[left]; })[0] || first;
+}
+function buildPublicIPFailure(results) {
+  var errors = (results || []).map(function (item) {
+    return item && item.source ? item.source + ': ' + (item.error || 'failed') : '';
+  }).filter(Boolean).join('; ');
+  return { ok: false, source: '', ip: '', country: '', countryCode: '', region: '', city: '', org: '', asn: '', network: '', route: '', locationStatus: 'failed', confidence: 'Detection Failed', latencyMs: 0, sources: results || [], error: errors || 'Public IP service unavailable' };
+}
+function sourceLocationKey(item, mode) {
+  if (!item || !item.countryCode && !item.country) return '';
+  var country = normalizeCountryCode(item.country, item.countryCode) || cleanString(item.country).toLowerCase();
+  if (mode === 'country') return country;
+  return [country, cleanString(item.region).toLowerCase(), cleanString(item.city).toLowerCase()].join('|');
+}
+function bestGroup(groups) {
+  var best = null;
+  Object.keys(groups).forEach(function (key) {
+    var group = groups[key];
+    if (!best || group.items.length > best.items.length || (group.items.length === best.items.length && group.priority > best.priority)) best = group;
+  });
+  return best;
+}
+function hasTopGroupTie(groups, topGroup) {
+  if (!topGroup) return false;
+  var topCount = topGroup.items.length;
+  var tied = 0;
+  Object.keys(groups).forEach(function (key) {
+    if (groups[key].items.length === topCount) tied += 1;
+  });
+  return tied > 1;
+}
+function buildLocationGroups(sources, mode) {
+  var groups = {};
+  sources.forEach(function (item) {
+    var key = sourceLocationKey(item, mode);
+    if (!key) return;
+    if (!groups[key]) groups[key] = { key: key, items: [], priority: 0, sample: item };
+    groups[key].items.push(item);
+    groups[key].priority = Math.max(groups[key].priority, SOURCE_LOCATION_PRIORITY[item.source] || 0);
+    if ((SOURCE_LOCATION_PRIORITY[item.source] || 0) > (SOURCE_LOCATION_PRIORITY[groups[key].sample.source] || 0)) groups[key].sample = item;
+  });
+  return groups;
+}
+function chooseReferenceLocationSource(geoSources) {
+  return geoSources.slice().sort(function (left, right) {
+    return (SOURCE_LOCATION_PRIORITY[right.source] || 0) - (SOURCE_LOCATION_PRIORITY[left.source] || 0);
+  })[0] || null;
+}
+function mergeNetworkAttribution(sources) {
+  var sorted = sources.slice().sort(function (left, right) {
+    var leftScore = left.source === 'ipapi.is' ? 100 : (left.source === 'rdap.ripe' ? 90 : 50);
+    var rightScore = right.source === 'ipapi.is' ? 100 : (right.source === 'rdap.ripe' ? 90 : 50);
+    return rightScore - leftScore;
+  });
+  var result = { org: '', asn: '', network: '', route: '', netname: '', datacenter: false, proxy: false, vpn: false, rentedOrIpXO: false };
+  sorted.forEach(function (item) {
+    if (!item || !item.ok) return;
+    if (!result.org && item.org) result.org = item.org;
+    if (!result.asn && item.asn) result.asn = item.asn;
+    if (!result.network && item.network) result.network = item.network;
+    if (!result.route && item.route) result.route = item.route;
+    if (!result.netname && item.netname) result.netname = item.netname;
+    result.datacenter = result.datacenter || item.datacenter === true;
+    result.proxy = result.proxy || item.proxy === true;
+    result.vpn = result.vpn || item.vpn === true;
+    result.rentedOrIpXO = result.rentedOrIpXO || item.rentedOrIpXO === true;
+  });
+  return result;
+}
+function resolveIPAttribution(ip, results) {
+  var successful = (results || []).filter(function (item) { return item && item.ok; });
+  var geoSources = successful.filter(function (item) { return item.kind !== 'ip' && item.kind !== 'network' && (item.country || item.countryCode || item.region || item.city); });
+  var exactGroups = buildLocationGroups(geoSources, 'exact');
+  var countryGroups = buildLocationGroups(geoSources, 'country');
+  var exactGroup = bestGroup(exactGroups);
+  var countryGroup = bestGroup(countryGroups);
+  var reference = chooseReferenceLocationSource(geoSources);
+  var adopted = null;
+  var status = 'failed';
+  var confidence = 'Detection Failed';
+  if (exactGroup && exactGroup.items.length >= 2 && !hasTopGroupTie(exactGroups, exactGroup)) {
+    adopted = exactGroup.sample;
+    status = 'detected';
+    confidence = 'Majority Match';
+  } else if (countryGroup && countryGroup.items.length >= 2 && !hasTopGroupTie(countryGroups, countryGroup)) {
+    adopted = countryGroup.sample;
+    status = 'detected';
+    confidence = 'Country Majority';
+  } else if (geoSources.length > 1) {
+    adopted = reference;
+    status = 'conflict';
+    confidence = 'Location Conflict';
+  } else if (geoSources.length === 1) {
+    adopted = geoSources[0];
+    status = 'single';
+    confidence = 'Single Source';
+  }
+  var network = mergeNetworkAttribution(successful);
+  var latency = successful.reduce(function (total, item) { return total + (item.latencyMs || 0); }, 0);
+  if (!adopted) return buildPublicIPFailure(results);
+  return {
+    ok: true,
+    ip: ip,
+    country: adopted.country || '',
+    countryCode: adopted.countryCode || '',
+    region: adopted.region || '',
+    city: adopted.city || '',
+    org: network.org || adopted.org || '',
+    asn: network.asn || adopted.asn || '',
+    network: network.network || '',
+    route: network.route || '',
+    netname: network.netname || '',
+    datacenter: network.datacenter,
+    proxy: network.proxy,
+    vpn: network.vpn,
+    rentedOrIpXO: network.rentedOrIpXO,
+    source: adopted.source || '',
+    sources: results || [],
+    locationStatus: status,
+    confidence: confidence,
+    referenceSource: reference ? reference.source : '',
+    latencyMs: latency
+  };
 }
 async function collect() {
   var uaData = navigator.userAgentData ? {
@@ -1322,15 +1596,78 @@ function proxyEndpoint(proxy) {
   if (proxy.host) return proxy.host + (proxy.port ? ':' + proxy.port : '');
   return proxy.summary || uiText('No endpoint');
 }
+function proxyCountryName(info) {
+  var code = normalizeCountryCode(info && info.country, info && info.countryCode);
+  var country = countryNameFor(code, info && info.country);
+  if (currentUILang !== 'zh') return country;
+  var names = { BE: '比利时', CN: '中国', EU: '欧盟', HK: '中国香港', US: '美国' };
+  return names[code] || country;
+}
+function proxyRegionName(value, countryCode) {
+  var text = cleanString(value);
+  if (currentUILang !== 'zh') return text;
+  if (countryCode === 'HK' && /^hong kong$/i.test(text)) return '香港';
+  if (countryCode === 'CN' && /^beijing$/i.test(text)) return '北京';
+  return text;
+}
 function proxyLocation(info) {
   if (!info || !info.ok) return '-';
-  return [info.country, info.region, info.city].filter(Boolean).join(' / ') || uiText('No location');
+  var code = normalizeCountryCode(info.country, info.countryCode);
+  return [proxyCountryName(info), proxyRegionName(info.region, code), proxyRegionName(info.city, code)].filter(Boolean).join(' / ') || uiText('No location');
 }
 function proxyLine(label, value) {
   return '<div class="proxy-line"><span class="proxy-label">' + uiText(label) + '</span><span class="proxy-value">' + escapeHtml(proxyDisplayValue(value)) + '</span></div>';
 }
+function proxyHTMLLine(label, html) {
+  return '<div class="proxy-line"><span class="proxy-label">' + uiText(label) + '</span><span class="proxy-value">' + html + '</span></div>';
+}
 function proxyStatusLine(label, text, status) {
   return '<div class="proxy-line"><span class="proxy-label">' + uiText(label) + '</span><span class="proxy-value"><span class="proxy-status ' + escapeHtml(status) + '">' + uiText(text) + '</span></span></div>';
+}
+function proxyExitStatus(info) {
+  if (!info || !info.ok) return { text: 'Detection Failed', status: 'bad' };
+  if (info.locationStatus === 'conflict') return { text: 'Location Conflict', status: 'warn' };
+  if (info.locationStatus === 'single') return { text: 'Single Source', status: 'warn' };
+  return { text: 'Detected', status: 'ok' };
+}
+function proxyLocationText(info) {
+  if (!info || !info.ok) return '-';
+  var location = proxyLocation(info);
+  if (info.locationStatus === 'conflict') return uiText('Location conflict') + '；' + uiText('Reference Location') + ': ' + location + (info.referenceSource ? ' (' + info.referenceSource + ')' : '');
+  return location;
+}
+function proxyNetworkText(info) {
+  if (!info || !info.ok) return '-';
+  var parts = [];
+  if (info.asn) parts.push('AS' + String(info.asn).replace(/^AS/i, ''));
+  if (info.route) parts.push(info.route);
+  else if (info.network) parts.push(info.network);
+  if (info.org) parts.push(info.org);
+  if (info.netname) parts.push(info.netname);
+  if (info.datacenter) parts.push(uiText('Datacenter'));
+  if (info.proxy || info.vpn) parts.push(uiText('Proxy/VPN'));
+  if (info.rentedOrIpXO) parts.push(uiText('IPXO/Rented Segment'));
+  return parts.length ? parts.join(' / ') : uiText('No ASN');
+}
+function proxySourceDetails(info) {
+  var sources = info && Array.isArray(info.sources) ? info.sources : [];
+  var lines = sources.filter(function (item) { return item && item.source && item.kind !== 'ip'; }).map(function (item) {
+    if (!item.ok) return item.source + ': ' + (item.error || 'failed');
+    var parts = [];
+    if (item.kind === 'network') {
+      parts.push(item.netname || item.org || 'network');
+      parts.push(item.route || item.network || '');
+      parts.push(item.country || item.countryCode || '');
+    } else {
+      parts.push(proxyLocation(item));
+      var network = proxyNetworkText(item);
+      if (network && network !== uiText('No ASN')) parts.push(network);
+    }
+    return item.source + ': ' + parts.filter(Boolean).join(' / ');
+  });
+  if (!lines.length && info && info.error) lines.push(info.error);
+  if (!lines.length) return escapeHtml(uiText('No source detail'));
+  return '<span class="proxy-source-list">' + lines.map(function (line) { return escapeHtml(line); }).join('<br>') + '</span>';
 }
 function renderProxyCheck(report) {
   var proxy = latestContext && latestContext.proxy ? latestContext.proxy : {};
@@ -1338,8 +1675,7 @@ function renderProxyCheck(report) {
   var info = network.proxyInfo || {};
   var configStatus = proxy.direct ? 'warn' : (proxy.configured ? 'ok' : 'warn');
   var configText = proxy.direct ? 'Direct' : (proxy.configured ? 'Configured' : 'No proxy configured');
-  var exitStatus = info.ok ? 'ok' : 'bad';
-  var exitText = info.ok ? 'Detected' : 'Detection Failed';
+  var exit = proxyExitStatus(info);
   var configLines = [
     proxyStatusLine('Status', configText, configStatus),
     proxyLine('Name', proxy.proxyName || proxy.proxyId || '-'),
@@ -1349,12 +1685,13 @@ function renderProxyCheck(report) {
     proxyLine('Group', proxy.groupName || '-')
   ].join('');
   var exitLines = [
-    proxyStatusLine('Status', exitText, exitStatus),
+    proxyStatusLine('Status', exit.text, exit.status),
     proxyLine('Current IP', info.ip || '-'),
-    proxyLine('Location', proxyLocation(info)),
-    proxyLine('ISP/Org', info.org || '-'),
+    proxyLine('Location', proxyLocationText(info)),
+    proxyLine('Confidence', info.ok ? uiText(info.confidence || 'Single Source') : '-'),
+    proxyLine('ASN/Network', proxyNetworkText(info)),
     proxyLine('Latency', info.ok ? String(info.latencyMs || 0) + ' ms' : '-'),
-    proxyLine('Source', info.source || (info.error ? uiText(info.error) : '-'))
+    proxyHTMLLine('Source Details', proxySourceDetails(info))
   ].join('');
   return '<section class="proxy-panel"><h2>' + uiText('Proxy Check') + '</h2><div class="proxy-grid"><div class="proxy-card"><div class="proxy-title">' + uiText('Configured Proxy') + '</div><div class="proxy-lines">' + configLines + '</div></div><div class="proxy-card"><div class="proxy-title">' + uiText('Browser Exit') + '</div><div class="proxy-lines">' + exitLines + '</div></div></div></section>';
 }
