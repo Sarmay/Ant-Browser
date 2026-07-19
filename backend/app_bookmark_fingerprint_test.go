@@ -5,6 +5,7 @@ import (
 	"ant-chrome/backend/internal/config"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBookmarkListIncludesFingerprintCheck(t *testing.T) {
@@ -59,6 +60,36 @@ func TestResolveFingerprintCheckStartURLs(t *testing.T) {
 	}
 	if !strings.HasPrefix(urls[1], "file://") || !strings.Contains(urls[1], "profileId=profile-123") {
 		t.Fatalf("fingerprint url = %q", urls[1])
+	}
+}
+
+func TestResolveFingerprintCheckStartURLsWithProfileDoesNotRelockManager(t *testing.T) {
+	app := NewApp(t.TempDir())
+	app.config = &config.Config{}
+	app.browserMgr = browser.NewManager(app.config, app.appRoot)
+	profile := &browser.Profile{
+		ProfileId:   "profile-locked",
+		ProxyId:     "__direct__",
+		ProxyConfig: "direct://",
+	}
+	app.browserMgr.Profiles[profile.ProfileId] = profile
+
+	done := make(chan []string, 1)
+	app.browserMgr.Mutex.Lock()
+	go func() {
+		expectedArgs := app.buildFingerprintCheckExpectedArgs(profile.ProfileId, profile.CoreId, profile.FingerprintArgs, profile.LaunchArgs)
+		done <- app.resolveFingerprintCheckStartURLsForExpectedArgsAndProfile(profile.ProfileId, expectedArgs, profile, []string{fingerprintCheckBookmarkURL})
+	}()
+
+	select {
+	case urls := <-done:
+		app.browserMgr.Mutex.Unlock()
+		if len(urls) != 1 || !strings.HasPrefix(urls[0], "file://") {
+			t.Fatalf("urls = %#v, want fingerprint file URL", urls)
+		}
+	case <-time.After(time.Second):
+		app.browserMgr.Mutex.Unlock()
+		t.Fatalf("resolve fingerprint start URLs deadlocked while manager mutex was held")
 	}
 }
 

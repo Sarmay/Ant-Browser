@@ -23,28 +23,35 @@ func (a *App) BrowserInstanceOpenFingerprintCheck(profileId string) (*BrowserPro
 }
 
 func (a *App) ensureFingerprintCheckPageURL(profileId string) (string, error) {
-	expectedArgs, err := a.fingerprintCheckProfileExpectedArgs(profileId)
+	profile, err := a.fingerprintCheckProfileSnapshot(profileId)
 	if err != nil {
 		return "", err
 	}
-	return a.ensureFingerprintCheckPageURLForExpectedArgs(profileId, expectedArgs, true)
+	expectedArgs := a.fingerprintCheckExpectedArgsFromProfile(profile)
+	return a.ensureFingerprintCheckPageURLForExpectedArgsAndProfile(profileId, expectedArgs, profile, true)
 }
 
 func (a *App) ensureFingerprintCheckPageBookmarkURL(profileId string) (string, error) {
-	expectedArgs, err := a.fingerprintCheckProfileExpectedArgs(profileId)
+	profile, err := a.fingerprintCheckProfileSnapshot(profileId)
 	if err != nil {
 		return "", err
 	}
-	return a.ensureFingerprintCheckPageURLForExpectedArgs(profileId, expectedArgs, false)
+	expectedArgs := a.fingerprintCheckExpectedArgsFromProfile(profile)
+	return a.ensureFingerprintCheckPageURLForExpectedArgsAndProfile(profileId, expectedArgs, profile, false)
 }
 
 func (a *App) ensureFingerprintCheckPageURLForProfile(profileId string, coreId string, fingerprintArgs []string, withTimestamp bool) (string, error) {
 	expectedArgs := a.buildFingerprintCheckExpectedArgs(profileId, coreId, fingerprintArgs, nil)
-	return a.ensureFingerprintCheckPageURLForExpectedArgs(profileId, expectedArgs, withTimestamp)
+	profile, _ := a.fingerprintCheckProfileSnapshot(profileId)
+	return a.ensureFingerprintCheckPageURLForExpectedArgsAndProfile(profileId, expectedArgs, profile, withTimestamp)
 }
 
 func (a *App) ensureFingerprintCheckPageURLForExpectedArgs(profileId string, expectedArgs []string, withTimestamp bool) (string, error) {
-	pagePath, err := a.writeFingerprintCheckPageForExpectedArgs(profileId, expectedArgs)
+	return a.ensureFingerprintCheckPageURLForExpectedArgsAndProfile(profileId, expectedArgs, nil, withTimestamp)
+}
+
+func (a *App) ensureFingerprintCheckPageURLForExpectedArgsAndProfile(profileId string, expectedArgs []string, profile *BrowserProfile, withTimestamp bool) (string, error) {
+	pagePath, err := a.writeFingerprintCheckPageForExpectedArgsAndProfile(profileId, expectedArgs, profile)
 	if err != nil {
 		return "", err
 	}
@@ -53,15 +60,20 @@ func (a *App) ensureFingerprintCheckPageURLForExpectedArgs(profileId string, exp
 
 func (a *App) writeFingerprintCheckPageForProfile(profileId string, coreId string, fingerprintArgs []string) (string, error) {
 	expectedArgs := a.buildFingerprintCheckExpectedArgs(profileId, coreId, fingerprintArgs, nil)
-	return a.writeFingerprintCheckPageForExpectedArgs(profileId, expectedArgs)
+	profile, _ := a.fingerprintCheckProfileSnapshot(profileId)
+	return a.writeFingerprintCheckPageForExpectedArgsAndProfile(profileId, expectedArgs, profile)
 }
 
 func (a *App) writeFingerprintCheckPageForExpectedArgs(profileId string, expectedArgs []string) (string, error) {
+	return a.writeFingerprintCheckPageForExpectedArgsAndProfile(profileId, expectedArgs, nil)
+}
+
+func (a *App) writeFingerprintCheckPageForExpectedArgsAndProfile(profileId string, expectedArgs []string, profile *BrowserProfile) (string, error) {
 	pageDir := a.resolveAppPath(filepath.ToSlash(filepath.Join("data", "fingerprint-check", safeFingerprintCheckProfilePath(profileId))))
 	if err := os.MkdirAll(pageDir, 0o755); err != nil {
 		return "", fmt.Errorf("创建指纹检测页目录失败: %w", err)
 	}
-	contextData, err := a.buildFingerprintCheckPageContextForExpectedArgs(profileId, expectedArgs)
+	contextData, err := a.buildFingerprintCheckPageContextForExpectedArgsAndProfile(profileId, expectedArgs, profile)
 	if err != nil {
 		return "", err
 	}
@@ -121,10 +133,14 @@ func (a *App) resolveFingerprintCheckStartURLForProfile(profileId string, coreId
 }
 
 func (a *App) resolveFingerprintCheckStartURLForExpectedArgs(profileId string, expectedArgs []string, targetURL string) string {
+	return a.resolveFingerprintCheckStartURLForExpectedArgsAndProfile(profileId, expectedArgs, nil, targetURL)
+}
+
+func (a *App) resolveFingerprintCheckStartURLForExpectedArgsAndProfile(profileId string, expectedArgs []string, profile *BrowserProfile, targetURL string) string {
 	if !strings.EqualFold(strings.TrimSpace(targetURL), fingerprintCheckBookmarkURL) {
 		return targetURL
 	}
-	pageURL, err := a.ensureFingerprintCheckPageURLForExpectedArgs(profileId, expectedArgs, true)
+	pageURL, err := a.ensureFingerprintCheckPageURLForExpectedArgsAndProfile(profileId, expectedArgs, profile, true)
 	if err != nil {
 		return targetURL
 	}
@@ -145,12 +161,16 @@ func (a *App) resolveFingerprintCheckStartURLsForProfile(profileId string, coreI
 }
 
 func (a *App) resolveFingerprintCheckStartURLsForExpectedArgs(profileId string, expectedArgs []string, urls []string) []string {
+	return a.resolveFingerprintCheckStartURLsForExpectedArgsAndProfile(profileId, expectedArgs, nil, urls)
+}
+
+func (a *App) resolveFingerprintCheckStartURLsForExpectedArgsAndProfile(profileId string, expectedArgs []string, profile *BrowserProfile, urls []string) []string {
 	if len(urls) == 0 {
 		return urls
 	}
 	out := append([]string{}, urls...)
 	for index, item := range out {
-		out[index] = a.resolveFingerprintCheckStartURLForExpectedArgs(profileId, expectedArgs, item)
+		out[index] = a.resolveFingerprintCheckStartURLForExpectedArgsAndProfile(profileId, expectedArgs, profile, item)
 	}
 	return out
 }
@@ -169,6 +189,10 @@ func (a *App) runtimeBookmarksForProfileData(profileId string, coreId string, fi
 }
 
 func (a *App) runtimeBookmarksForProfileExpectedArgs(profileId string, expectedArgs []string, bookmarks []BrowserBookmark) ([]BrowserBookmark, string, error) {
+	return a.runtimeBookmarksForProfileExpectedArgsAndProfile(profileId, expectedArgs, nil, bookmarks)
+}
+
+func (a *App) runtimeBookmarksForProfileExpectedArgsAndProfile(profileId string, expectedArgs []string, profile *BrowserProfile, bookmarks []BrowserBookmark) ([]BrowserBookmark, string, error) {
 	if len(bookmarks) == 0 {
 		return bookmarks, "", nil
 	}
@@ -182,7 +206,7 @@ func (a *App) runtimeBookmarksForProfileExpectedArgs(profileId string, expectedA
 	if !needsFingerprintURL {
 		return append([]BrowserBookmark{}, bookmarks...), "", nil
 	}
-	pageURL, err := a.ensureFingerprintCheckPageURLForExpectedArgs(profileId, expectedArgs, false)
+	pageURL, err := a.ensureFingerprintCheckPageURLForExpectedArgsAndProfile(profileId, expectedArgs, profile, false)
 	if err != nil {
 		return nil, "", err
 	}
@@ -231,8 +255,7 @@ func (a *App) buildFingerprintCheckPageContextForProfile(profileId string, coreI
 }
 
 func (a *App) buildFingerprintCheckPageContextForExpectedArgs(profileId string, expectedArgs []string) ([]byte, error) {
-	profile, _ := a.fingerprintCheckProfileSnapshot(profileId)
-	return a.buildFingerprintCheckPageContextForExpectedArgsAndProfile(profileId, expectedArgs, profile)
+	return a.buildFingerprintCheckPageContextForExpectedArgsAndProfile(profileId, expectedArgs, nil)
 }
 
 func (a *App) buildFingerprintCheckPageContextForExpectedArgsAndProfile(profileId string, expectedArgs []string, profile *BrowserProfile) ([]byte, error) {

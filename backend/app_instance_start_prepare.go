@@ -102,7 +102,7 @@ func (a *App) resolveBrowserStartProfile(input browserStartInput) (*BrowserProfi
 	}
 
 	fingerprintExpectedArgs := a.fingerprintCheckExpectedArgsForRunningProfile(profile, input.ExtraLaunchArgs)
-	resolvedStartURLs := a.resolveFingerprintCheckStartURLsForExpectedArgs(profile.ProfileId, fingerprintExpectedArgs, input.StartURLs)
+	resolvedStartURLs := a.resolveFingerprintCheckStartURLsForExpectedArgsAndProfile(profile.ProfileId, fingerprintExpectedArgs, profile, input.StartURLs)
 	if err := a.openBrowserTabForRunningProfile(profile, input.ExtraLaunchArgs, resolvedStartURLs); err != nil {
 		startErr := fmt.Errorf("实例已在运行，但新标签打开失败：%w", err)
 		log.Error("运行中实例新标签打开失败",
@@ -140,8 +140,8 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 	restoreLastSession := browserRestoreLastSession(a.config)
 	extensionDirs := a.browserMgr.EnabledExtensionDirsForProfile(input.ProfileID)
 	fingerprintExpectedArgs := combineFingerprintExpectedArgs(fingerprintLaunchArgs, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs)
-	defaultStartURLs := a.resolveFingerprintCheckStartURLsForExpectedArgs(profile.ProfileId, fingerprintExpectedArgs, mergeStartURLs(browserDefaultStartURLs(a.config), bookmarkStartURLs(bookmarks)))
-	startURLs := a.resolveFingerprintCheckStartURLsForExpectedArgs(profile.ProfileId, fingerprintExpectedArgs, input.StartURLs)
+	defaultStartURLs := a.resolveFingerprintCheckStartURLsForExpectedArgsAndProfile(profile.ProfileId, fingerprintExpectedArgs, profile, mergeStartURLs(browserDefaultStartURLs(a.config), bookmarkStartURLs(bookmarks)))
+	startURLs := a.resolveFingerprintCheckStartURLsForExpectedArgsAndProfile(profile.ProfileId, fingerprintExpectedArgs, profile, input.StartURLs)
 	launchTargets, deferredStartTargets := buildBrowserLaunchTargets(
 		startURLs,
 		defaultStartURLs,
@@ -254,7 +254,7 @@ func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *Brow
 			return nil, nil, nil, "", "", errBrowserStartHandledByRecoveredRuntime
 		}
 		fingerprintExpectedArgs := a.fingerprintCheckExpectedArgsForRunningProfile(profile, input.ExtraLaunchArgs)
-		resolvedStartURLs := a.resolveFingerprintCheckStartURLsForExpectedArgs(profile.ProfileId, fingerprintExpectedArgs, input.StartURLs)
+		resolvedStartURLs := a.resolveFingerprintCheckStartURLsForExpectedArgsAndProfile(profile.ProfileId, fingerprintExpectedArgs, profile, input.StartURLs)
 		if err := a.openBrowserTabForRunningProfile(profile, input.ExtraLaunchArgs, resolvedStartURLs); err != nil {
 			startErr := fmt.Errorf("实例已在运行，但新标签打开失败：%w", err)
 			profile.LastError = startErr.Error()

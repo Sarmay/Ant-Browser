@@ -85,7 +85,7 @@ func (a *App) BrowserInstanceOpenUrl(profileId string, targetUrl string) (bool, 
 	snapshot := copyBrowserProfileSnapshot(profile)
 	a.browserMgr.Mutex.Unlock()
 	fingerprintExpectedArgs := a.fingerprintCheckExpectedArgsFromProfile(snapshot)
-	normalizedTargetURL = a.resolveFingerprintCheckStartURLForExpectedArgs(snapshot.ProfileId, fingerprintExpectedArgs, normalizedTargetURL)
+	normalizedTargetURL = a.resolveFingerprintCheckStartURLForExpectedArgsAndProfile(snapshot.ProfileId, fingerprintExpectedArgs, snapshot, normalizedTargetURL)
 
 	if snapshot.DebugReady && snapshot.DebugPort > 0 {
 		if err := createBrowserStartTarget(snapshot.DebugPort, normalizedTargetURL); err == nil {
