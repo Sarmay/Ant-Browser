@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -195,30 +196,140 @@ func (a *App) runtimeBookmarksForProfileExpectedArgs(profileId string, expectedA
 }
 
 type fingerprintCheckPageContext struct {
-	ProfileId string                         `json:"profileId"`
-	Expected  BrowserFingerprintExpectedInfo `json:"expected"`
+	ProfileId  string                         `json:"profileId"`
+	Expected   BrowserFingerprintExpectedInfo `json:"expected"`
+	Proxy      fingerprintCheckProxyContext   `json:"proxy"`
+	UILanguage string                         `json:"uiLanguage"`
+}
+
+type fingerprintCheckProxyContext struct {
+	Configured bool   `json:"configured"`
+	Direct     bool   `json:"direct"`
+	ProxyId    string `json:"proxyId,omitempty"`
+	ProxyName  string `json:"proxyName,omitempty"`
+	GroupName  string `json:"groupName,omitempty"`
+	Type       string `json:"type,omitempty"`
+	Host       string `json:"host,omitempty"`
+	Port       string `json:"port,omitempty"`
+	HasAuth    bool   `json:"hasAuth,omitempty"`
+	Summary    string `json:"summary,omitempty"`
 }
 
 func (a *App) buildFingerprintCheckPageContext(profileId string) ([]byte, error) {
-	expectedArgs, err := a.fingerprintCheckProfileExpectedArgs(profileId)
+	profile, err := a.fingerprintCheckProfileSnapshot(profileId)
 	if err != nil {
 		return nil, err
 	}
-	return a.buildFingerprintCheckPageContextForExpectedArgs(profileId, expectedArgs)
+	expectedArgs := a.fingerprintCheckExpectedArgsFromProfile(profile)
+	return a.buildFingerprintCheckPageContextForExpectedArgsAndProfile(profileId, expectedArgs, profile)
 }
 
 func (a *App) buildFingerprintCheckPageContextForProfile(profileId string, coreId string, fingerprintArgs []string) ([]byte, error) {
 	expectedArgs := a.buildFingerprintCheckExpectedArgs(profileId, coreId, fingerprintArgs, nil)
-	return a.buildFingerprintCheckPageContextForExpectedArgs(profileId, expectedArgs)
+	profile, _ := a.fingerprintCheckProfileSnapshot(profileId)
+	return a.buildFingerprintCheckPageContextForExpectedArgsAndProfile(profileId, expectedArgs, profile)
 }
 
 func (a *App) buildFingerprintCheckPageContextForExpectedArgs(profileId string, expectedArgs []string) ([]byte, error) {
+	profile, _ := a.fingerprintCheckProfileSnapshot(profileId)
+	return a.buildFingerprintCheckPageContextForExpectedArgsAndProfile(profileId, expectedArgs, profile)
+}
+
+func (a *App) buildFingerprintCheckPageContextForExpectedArgsAndProfile(profileId string, expectedArgs []string, profile *BrowserProfile) ([]byte, error) {
 	expected := buildBrowserFingerprintExpected(expectedArgs)
-	data, err := json.MarshalIndent(fingerprintCheckPageContext{ProfileId: profileId, Expected: expected}, "", "  ")
+	data, err := json.MarshalIndent(fingerprintCheckPageContext{
+		ProfileId:  profileId,
+		Expected:   expected,
+		Proxy:      a.buildFingerprintCheckProxyContext(profile),
+		UILanguage: fingerprintCheckPreferredUILanguage(expected),
+	}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("生成指纹检测上下文失败: %w", err)
 	}
 	return append(data, '\n'), nil
+}
+
+func (a *App) buildFingerprintCheckProxyContext(profile *BrowserProfile) fingerprintCheckProxyContext {
+	if profile == nil {
+		return fingerprintCheckProxyContext{Summary: "Not Configured"}
+	}
+
+	ctx := fingerprintCheckProxyContext{
+		ProxyId:   strings.TrimSpace(profile.ProxyId),
+		ProxyName: strings.TrimSpace(profile.ProxyBindName),
+	}
+	proxyConfig := strings.TrimSpace(profile.ProxyConfig)
+	if a != nil && a.browserMgr != nil && ctx.ProxyId != "" {
+		if proxyItem, ok := a.browserMgr.GetProxyByID(ctx.ProxyId); ok {
+			if ctx.ProxyName == "" {
+				ctx.ProxyName = strings.TrimSpace(proxyItem.ProxyName)
+			}
+			ctx.GroupName = strings.TrimSpace(proxyItem.GroupName)
+			if proxyConfig == "" {
+				proxyConfig = strings.TrimSpace(proxyItem.ProxyConfig)
+			}
+		}
+	}
+	if ctx.ProxyName == "" {
+		ctx.ProxyName = strings.TrimSpace(profile.ProxyBindName)
+	}
+
+	ctx.Type, ctx.Host, ctx.Port, ctx.Summary, ctx.HasAuth, ctx.Direct = fingerprintCheckProxyDescriptor(proxyConfig)
+	ctx.Configured = strings.TrimSpace(proxyConfig) != "" || ctx.ProxyId != "" || ctx.ProxyName != ""
+	if !ctx.Configured {
+		ctx.Summary = "Not Configured"
+	}
+	return ctx
+}
+
+func fingerprintCheckProxyDescriptor(raw string) (proxyType string, host string, port string, summary string, hasAuth bool, direct bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", "", "", "Not Configured", false, false
+	}
+	lower := strings.ToLower(trimmed)
+	if lower == "direct://" || lower == "__direct__" || lower == "direct" {
+		return "direct", "", "", "direct://", false, true
+	}
+	if strings.HasPrefix(lower, "chain+") {
+		return "chain", "", "", "Chain Proxy", false, false
+	}
+	if parsed, err := url.Parse(trimmed); err == nil && parsed.Scheme != "" {
+		proxyType = strings.ToLower(parsed.Scheme)
+		host = parsed.Hostname()
+		port = parsed.Port()
+		hasAuth = parsed.User != nil
+		if host != "" {
+			summary = proxyType + "://" + host
+			if port != "" {
+				summary += ":" + port
+			}
+			if hasAuth {
+				summary += " (auth)"
+			}
+			return proxyType, host, port, summary, hasAuth, false
+		}
+		return proxyType, "", "", proxyType + "://***", hasAuth, false
+	}
+	if strings.HasPrefix(trimmed, "{") || strings.Contains(lower, "outbounds") || strings.Contains(lower, "proxies:") {
+		return "config", "", "", "Structured Proxy Config", false, false
+	}
+	return "custom", "", "", "Custom Proxy Config", false, false
+}
+
+func fingerprintCheckPreferredUILanguage(expected BrowserFingerprintExpectedInfo) string {
+	if fingerprintCheckPlatformUsesEnglish(expected.Platform) || fingerprintCheckPlatformUsesEnglish(expected.PlatformVersion) {
+		return "en"
+	}
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		return "en"
+	}
+	return "zh"
+}
+
+func fingerprintCheckPlatformUsesEnglish(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	return strings.Contains(normalized, "linux") || strings.Contains(normalized, "x11") || strings.Contains(normalized, "mac") || strings.Contains(normalized, "darwin")
 }
 
 func (a *App) fingerprintCheckProfileExpectedArgs(profileId string) ([]string, error) {
@@ -336,7 +447,7 @@ const fingerprintCheckHTML = `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ant 指纹检测</title>
   <style>
-    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", sans-serif; }
     body { margin: 0; background: #f6f7f9; color: #111827; }
     main { max-width: 1480px; margin: 0 auto; padding: 24px; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
@@ -356,7 +467,7 @@ const fingerprintCheckHTML = `<!doctype html>
     td.source { width: 108px; color: #334155; font-weight: 600; white-space: nowrap; }
     td.hit { width: 92px; font-weight: 700; white-space: nowrap; }
     td.reason { width: 380px; color: #475569; }
-    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; word-break: break-all; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Noto Sans SC", "WenQuanYi Micro Hei", monospace; word-break: break-all; }
     .value-pair { display: grid; gap: 5px; }
     .value-line { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 8px; align-items: start; }
     .value-label { color: #64748b; }
@@ -369,6 +480,19 @@ const fingerprintCheckHTML = `<!doctype html>
     .flow-step { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #334155; }
     .flow-step strong { display: block; color: #111827; margin-bottom: 3px; }
     .diff-empty { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; color: #475569; font-size: 13px; margin-bottom: 14px; }
+    .proxy-panel { overflow: hidden; }
+    .proxy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; }
+    .proxy-card { padding: 12px 13px; border-right: 1px solid #e5e7eb; }
+    .proxy-card:last-child { border-right: 0; }
+    .proxy-title { font-size: 13px; font-weight: 700; color: #111827; margin-bottom: 8px; }
+    .proxy-lines { display: grid; gap: 6px; }
+    .proxy-line { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+    .proxy-label { color: #64748b; white-space: nowrap; }
+    .proxy-value { color: #111827; min-width: 0; word-break: break-all; }
+    .proxy-status { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+    .proxy-status.ok { color: #047857; background: #ecfdf5; }
+    .proxy-status.warn { color: #b45309; background: #fffbeb; }
+    .proxy-status.bad { color: #b91c1c; background: #fef2f2; }
     pre { margin: 0; padding: 12px; white-space: pre-wrap; word-break: break-all; font-size: 12px; }
   </style>
 </head>
@@ -376,7 +500,7 @@ const fingerprintCheckHTML = `<!doctype html>
 <main>
   <header>
     <div>
-      <h1>Ant 指纹检测</h1>
+      <h1 id="pageTitle">Ant 指纹检测</h1>
       <div class="meta" id="meta">正在检测当前浏览器真实指纹...</div>
     </div>
     <div class="actions">
@@ -387,13 +511,14 @@ const fingerprintCheckHTML = `<!doctype html>
       <button id="copyBtn">复制 JSON</button>
     </div>
   </header>
-  <div class="flow">
+  <div class="flow" id="flowSteps">
     <div class="flow-step"><strong>1 保存修改前</strong>旧配置启动后检测，点保存修改前快照。</div>
     <div class="flow-step"><strong>2 修改并重启</strong>改 Seed 或指纹配置后，关闭实例再启动。</div>
     <div class="flow-step"><strong>3 重新检测</strong>进入本页点重新检测，看修改前后变化。</div>
   </div>
   <div class="summary" id="summary"></div>
   <div id="changeApp"></div>
+  <div id="proxyApp"></div>
   <div class="grid" id="app"></div>
 </main>
 <script>
@@ -403,6 +528,215 @@ var fingerprintCheckRunning = false;
 var latestBeforeSnapshot = null;
 var FINGERPRINT_AUTO_REFRESH_MS = 60 * 60 * 1000;
 var FINGERPRINT_AUTO_REFRESH_CHECK_MS = 60 * 1000;
+var currentUILang = latestContext && latestContext.uiLanguage === 'en' ? 'en' : 'zh';
+var UI_ZH = {
+  'Ant Fingerprint Check': 'Ant 指纹检测',
+  'Checking current browser fingerprint...': '正在检测当前浏览器真实指纹...',
+  'Reset Baseline': '重建基线',
+  'Save Before': '保存修改前快照',
+  'Clear Before': '清除修改前快照',
+  'Refresh': '重新检测',
+  'Copy JSON': '复制 JSON',
+  'Expected': '期望',
+  'Actual': '实际',
+  'Item': '指纹项',
+  'Value': '值',
+  'Source': '来源',
+  'Expected Source': '期望来源',
+  'Result': '结果',
+  'Reason': '原因',
+  'Time': '时间',
+  'Fingerprint Check': '指纹对比',
+  'Before/After Changes': '修改前后变化',
+  'No before snapshot saved. To compare changes after Seed/config edits: run the old config, click Save Before, edit config and restart the instance, then click Refresh.': '未保存修改前快照。要看改 Seed 后哪些项变化：先在旧配置下点“保存修改前快照”，改配置并重启实例后再点“重新检测”。',
+  'Effect Check': '效果观测',
+  'Effect Baseline Set': '已建观测基线',
+  'Effect Stable': '观测一致',
+  'Effect Changed': '观测变化',
+  'Runtime Baseline': '运行基线',
+  'Baseline Match': '基线一致',
+  'Baseline Changed': '基线变化',
+  'Match': '命中',
+  'Compatible': '口径匹配',
+  'Mismatch': '未命中',
+  'Risk': '风险',
+  'Configured': '已配置',
+  'Unsupported': '不可配置',
+  'Baseline Set': '已建基线',
+  'Not Configured': '未配置',
+  'Not Collected': '未采集',
+  'Config Expected': '配置期望',
+  'Config Sent': '配置下发',
+  'Built-in Expected': '内置期望',
+  'Known Ineffective': '实测无效',
+  'Before/After': '修改前后',
+  'Changed': '已变化',
+  'Unchanged': '未变化',
+  'No Runtime Baseline': '未建立运行基线',
+  'No Effect Baseline': '未建立观测基线',
+  'JS unreadable': 'JS 不可读取',
+  'Not used as expected': '不作为期望',
+  'Fingerprint Seed': '指纹 Seed',
+  'Native Exposure Disabled': '禁用原生暴露',
+  'Language': '语言',
+  'Languages': '语言列表',
+  'Timezone': '时区',
+  'CPU Cores': 'CPU 核心',
+  'Device Memory': '设备内存',
+  'Touch Points': '触控点',
+  'Window Size': '窗口大小',
+  'Color Depth': '颜色深度',
+  'Brand': '品牌',
+  'Brand Version': '品牌版本',
+  'Platform': '平台',
+  'Platform Version': '平台版本',
+  'WebRTC Host': 'WebRTC Host',
+  'Media Device Count': '媒体设备数量',
+  'Canvas Noise': 'Canvas 噪声',
+  'Audio Noise': 'Audio 噪声',
+  'ClientRects Noise': 'ClientRects 噪声',
+  'Screen Size': '屏幕尺寸',
+  'Screen Height': '屏幕高度',
+  'Config Seed': '配置 Seed',
+  'Proxy Check': '代理检测',
+  'Configured Proxy': '配置代理',
+  'Browser Exit': '浏览器出口',
+  'Name': '名称',
+  'Type': '类型',
+  'Endpoint': '地址',
+  'Auth': '认证',
+  'Group': '分组',
+  'Current IP': '当前 IP',
+  'Location': '归属地',
+  'ISP/Org': '运营商/组织',
+  'Latency': '耗时',
+  'Status': '状态',
+  'Direct': '直连',
+  'Yes': '有',
+  'No': '无',
+  'Detected': '已检测',
+  'Detection Failed': '检测失败',
+  'Not Checked': '未检测',
+  'No proxy configured': '未配置代理',
+  'No endpoint': '无地址',
+  'No location': '无归属地',
+  'Unknown': '未知',
+  'Chain Proxy': '链式代理',
+  'Structured Proxy Config': '结构化代理配置',
+  'Custom Proxy Config': '自定义代理配置',
+  'Public IP service unavailable': '公网 IP 服务不可用',
+  'Checked: Local ': '检测时间：本地 ',
+  'Before ': '修改前 ',
+  ' / Current ': ' / 当前 ',
+  'Seed is a launch parameter and cannot be read back from page JS': 'Seed 是启动参数，页面无法从 JS 反读',
+  'This is a launch protection policy and cannot be read back from page JS': '该项是启动保护策略，页面无法从 JS 反读',
+  'Compare navigator.language': '比对 navigator.language',
+  'Compare navigator.languages prefix': '比对 navigator.languages 前缀',
+  'Compare Intl.DateTimeFormat().resolvedOptions().timeZone': '比对 Intl.DateTimeFormat().resolvedOptions().timeZone',
+  'Compare navigator.hardwareConcurrency': '比对 navigator.hardwareConcurrency',
+  'Compare navigator.deviceMemory': '比对 navigator.deviceMemory',
+  'Compare navigator.maxTouchPoints': '比对 navigator.maxTouchPoints',
+  'Compare navigator.doNotTrack': '比对 navigator.doNotTrack',
+  'Compare window.outerWidth/outerHeight': '比对 window.outerWidth/outerHeight',
+  'Compare screen.colorDepth': '比对 screen.colorDepth',
+  'Compare whether User-Agent contains expected brand': '比对 User-Agent 是否包含期望品牌',
+  'Prefer full browser version comparison; if User-Agent exposes only major version, compare by major version': '优先比对完整浏览器版本；User-Agent 只暴露主版本时按主版本口径匹配',
+  'Compare navigator.platform': '比对 navigator.platform',
+  'Prefer full platform version comparison; if User-Agent / UA-CH exposes short version only, compare visible prefix': '优先比对完整系统版本；User-Agent / UA-CH 只暴露短版本时按可见版本前缀匹配',
+  'Expected navigator.webdriver not to expose automation': '期望 navigator.webdriver 不暴露自动化',
+  'Compare whether local host candidate is exposed': '比对是否暴露本机 host candidate',
+  'No WebRTC expected value configured; showing actual collected value only': '未配置 WebRTC 期望，只展示实际采集值',
+  'Standalone media device count parameter is ineffective in local Chrom-144 test and is not passed as runtime parameter': '媒体设备数量独立参数本地 Chrom-144 实测无效，未作为运行参数传递',
+  'Canvas noise flag is passed as a launch parameter; page JS cannot read the flag directly. Check Canvas Hash stability for effect.': 'Canvas 噪声开关已作为启动参数下发；页面不能直接反读开关，效果看 Canvas Hash 是否稳定变化',
+  'Standalone audio noise parameter is ineffective in local Chrom-144 test; observe audio changes through Seed and Audio Hash': 'Audio 独立噪声参数本地 Chrom-144 实测无效；音频变化通过 Seed 和 Audio Hash 观察',
+  'ClientRects noise flag is passed as a launch parameter; page JS cannot read the flag directly. Check ClientRects Hash stability for effect.': 'ClientRects 噪声开关已作为启动参数下发；页面不能直接反读开关，效果看 ClientRects Hash 是否稳定变化',
+  'Canvas Hash is an effect observation for Canvas noise, not expected config': 'Canvas Hash 是 Canvas 噪声效果观测值，不是配置期望',
+  'Canvas Hash is detected output hash, not expected config': 'Canvas Hash 是检测输出哈希，不是配置期望',
+  'Audio Hash is detected output hash, not expected config': 'Audio Hash 是检测输出哈希，不是配置期望',
+  'ClientRects Hash is an effect observation for ClientRects noise, not expected config': 'ClientRects Hash 是 ClientRects 噪声效果观测值，不是配置期望',
+  'ClientRects Hash is detected output hash, not expected config': 'ClientRects Hash 是检测输出哈希，不是配置期望',
+  'Fonts Hash is detected output hash, not expected config': 'Fonts Hash 是检测输出哈希，不是配置期望',
+  'Compare whether detected fonts include configured list': '比对检测到的字体是否包含配置列表',
+  'Compare WebGL Vendor': '比对 WebGL Vendor',
+  'Compare WebGL Renderer': '比对 WebGL Renderer',
+  'WebGL Hash is detected output hash, not expected config': 'WebGL Hash 是检测输出哈希，不是配置期望',
+  'Compare plugin list': '比对插件列表',
+  'Compare MIME list': '比对 MIME 列表',
+  'Compare screen size': '比对屏幕尺寸',
+  'Compare DPR': '比对 DPR',
+  'No explicit config and no actual value collected; runtime baseline cannot be created': '未显式配置，且本次没有可用实际值，无法建立运行基线',
+  'Actual value matches expected value': '实际值与期望值一致',
+  'Actual value does not match expected value': '实际值与期望值不一致',
+  'Browser JS cannot read this launch config; only expected value is shown': '浏览器 JS 无法读取该启动配置，只展示期望值',
+  'Local core test shows this standalone parameter is ineffective, so it is not used as expected config': '当前内核本地实测该独立参数无效，未作为可配置期望',
+  'First collected value saved as runtime baseline': '首次采集并保存为运行基线',
+  ' is an effect observation, not expected config': ' 是效果观测值，不是配置期望',
+  '. Saved first actual value as effect baseline. After changing fingerprint config or Seed, reset baseline and refresh.': '；已保存首次实际值为观测基线。改过指纹配置或 Seed 后，先重建基线再刷新验证稳定性',
+  '. Current value differs from effect baseline. This means output changed, not config failure. If config was not changed and it still changes after reset, then it is a stability issue.': '；当前实际值与观测基线不同，说明输出已变化，不等于配置失败。若未改配置且重建基线后仍变化，才是稳定性问题',
+  '. Current value matches effect baseline.': '；当前实际值与观测基线一致',
+  '. No actual value is available, so effect baseline cannot be created.': '；本次没有可用实际值，无法建立观测基线',
+  ' has no explicit config value. The first actual value was saved as runtime baseline for later comparison.': ' 没有显式配置值；检测页已用首次实际采集值建立运行基线，后续按基线比对',
+  ' has no explicit expected config. Current value differs from runtime baseline; this is an observed change, not config failure.': ' 没有显式配置期望；当前实际值与运行基线不同，这是观测值变化，不代表配置未生效',
+  ' has no explicit expected config. Current value matches runtime baseline.': ' 没有显式配置期望；当前实际值与运行基线一致',
+  ' has no explicit expected config and no actual value is available, so runtime baseline cannot be created.': ' 没有显式配置期望，且本次没有可用实际值，无法建立运行基线'
+};
+var UI_ZH_KEYS = Object.keys(UI_ZH).sort(function (left, right) { return right.length - left.length; });
+function uiText(text) {
+  var value = String(text || '');
+  if (currentUILang !== 'zh') return value;
+  if (Object.prototype.hasOwnProperty.call(UI_ZH, value)) return UI_ZH[value];
+  var output = value;
+  UI_ZH_KEYS.forEach(function (key) {
+    if (key && output.indexOf(key) >= 0) output = output.split(key).join(UI_ZH[key]);
+  });
+  return output;
+}
+function uiValue(value) {
+  var text = displayValue(value);
+  if (currentUILang === 'zh' && Object.prototype.hasOwnProperty.call(UI_ZH, text)) return UI_ZH[text];
+  return text;
+}
+function platformUsesEnglish(value) {
+  var normalized = String(value || '').toLowerCase();
+  return normalized.indexOf('linux') >= 0 || normalized.indexOf('x11') >= 0 || normalized.indexOf('mac') >= 0 || normalized.indexOf('darwin') >= 0;
+}
+function resolveUILanguage(context, report) {
+  var expected = context && context.expected ? context.expected : {};
+  var identity = report && report.identity ? report.identity : {};
+  var uaData = identity.userAgentData || {};
+  var candidates = [expected.platform, expected.platformVersion, identity.platform, identity.userAgent, uaData.platform, navigator.platform || '', navigator.userAgent || ''];
+  for (var index = 0; index < candidates.length; index++) {
+    if (platformUsesEnglish(candidates[index])) return 'en';
+  }
+  return context && context.uiLanguage === 'en' ? 'en' : 'zh';
+}
+function setNodeText(id, text) {
+  var node = document.getElementById(id);
+  if (node) node.textContent = uiText(text);
+}
+function applyStaticText() {
+  document.documentElement.lang = currentUILang === 'en' ? 'en' : 'zh-CN';
+  document.title = uiText('Ant Fingerprint Check');
+  setNodeText('pageTitle', 'Ant Fingerprint Check');
+  if (!latestReport) setNodeText('meta', 'Checking current browser fingerprint...');
+  setNodeText('resetBaselineBtn', 'Reset Baseline');
+  setNodeText('saveBeforeBtn', 'Save Before');
+  setNodeText('clearBeforeBtn', 'Clear Before');
+  setNodeText('refreshBtn', 'Refresh');
+  setNodeText('copyBtn', 'Copy JSON');
+  var flow = document.getElementById('flowSteps');
+  if (flow) {
+    if (currentUILang === 'en') {
+      flow.innerHTML = '<div class="flow-step"><strong>1 Save Before</strong>Run the old config, then save a before snapshot.</div><div class="flow-step"><strong>2 Edit And Restart</strong>Change Seed or fingerprint config, then restart the instance.</div><div class="flow-step"><strong>3 Refresh</strong>Refresh this page and compare before/after changes.</div>';
+    } else {
+      flow.innerHTML = '<div class="flow-step"><strong>1 保存修改前</strong>旧配置启动后检测，点保存修改前快照。</div><div class="flow-step"><strong>2 修改并重启</strong>改 Seed 或指纹配置后，关闭实例再启动。</div><div class="flow-step"><strong>3 重新检测</strong>进入本页点重新检测，看修改前后变化。</div>';
+    }
+  }
+}
+function updateUILanguage(report) {
+  currentUILang = resolveUILanguage(latestContext, report);
+  applyStaticText();
+}
 function hashString(input) {
   var hash = 2166136261;
   var text = String(input || '');
@@ -421,7 +755,7 @@ function canvasHash() {
     ctx.textBaseline = 'top';
     ctx.font = '16px Arial';
     ctx.fillStyle = '#f60'; ctx.fillRect(4, 4, 150, 36);
-    ctx.fillStyle = '#069'; ctx.fillText('Ant fingerprint 检测', 9, 12);
+    ctx.fillStyle = '#069'; ctx.fillText('Ant fingerprint check', 9, 12);
     ctx.strokeStyle = 'rgba(120,60,200,.85)'; ctx.beginPath(); ctx.arc(210, 44, 30, 0, Math.PI * 2); ctx.stroke();
     return hashString(canvas.toDataURL());
   }, '');
@@ -500,6 +834,71 @@ async function webrtcCandidates() {
     });
   }, []);
 }
+function normalizePublicIPPayload(source, data) {
+  data = data || {};
+  if (source === 'ipwho.is' && data.success === false) throw new Error(data.message || 'ipwho.is failed');
+  var connection = data.connection || {};
+  var ip = data.ip || data.query || '';
+  var country = data.country || data.country_name || '';
+  var region = data.region || data.regionName || data.region_name || '';
+  var city = data.city || '';
+  var org = connection.org || connection.isp || data.org || data.isp || data.asn_org || '';
+  return {
+    ip: ip,
+    country: country,
+    region: region,
+    city: city,
+    org: org,
+    source: source
+  };
+}
+function fetchJSONWithTimeout(url, timeoutMs) {
+  return new Promise(function (resolve, reject) {
+    var controller = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () {
+      if (controller) controller.abort();
+      reject(new Error('timeout'));
+    }, timeoutMs);
+    fetch(url, {
+      cache: 'no-store',
+      credentials: 'omit',
+      signal: controller ? controller.signal : undefined,
+      headers: { 'Accept': 'application/json' }
+    }).then(function (response) {
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return response.json();
+    }).then(function (data) {
+      clearTimeout(timer);
+      resolve(data);
+    }).catch(function (error) {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
+async function collectPublicIPInfo() {
+  var endpoints = [
+    ['ipwho.is', 'https://ipwho.is/'],
+    ['ipapi.co', 'https://ipapi.co/json/'],
+    ['ipify', 'https://api.ipify.org?format=json']
+  ];
+  var lastError = '';
+  for (var index = 0; index < endpoints.length; index += 1) {
+    var source = endpoints[index][0];
+    var startedAt = Date.now();
+    try {
+      var payload = await fetchJSONWithTimeout(endpoints[index][1], 6500);
+      var info = normalizePublicIPPayload(source, payload);
+      info.ok = !!info.ip;
+      info.latencyMs = Date.now() - startedAt;
+      if (!info.ok) throw new Error('empty ip');
+      return info;
+    } catch (error) {
+      lastError = source + ': ' + (error && error.message ? error.message : String(error || 'failed'));
+    }
+  }
+  return { ok: false, source: '', ip: '', country: '', region: '', city: '', org: '', latencyMs: 0, error: lastError || 'Public IP service unavailable' };
+}
 async function collect() {
   var uaData = navigator.userAgentData ? {
     brands: navigator.userAgentData.brands || [],
@@ -508,7 +907,9 @@ async function collect() {
   } : null;
   var fonts = fontProbe();
   var gl = webglInfo();
-  var candidates = await webrtcCandidates();
+  var networkResults = await Promise.all([webrtcCandidates(), collectPublicIPInfo()]);
+  var candidates = networkResults[0];
+  var proxyInfo = networkResults[1];
   return {
     generatedAt: new Date().toISOString(),
     urlProfileId: new URLSearchParams(location.search).get('profileId') || '',
@@ -558,7 +959,8 @@ async function collect() {
     },
     network: {
       webrtcCandidates: candidates,
-      localCandidateCount: candidates.filter(function (item) { return / typ host /.test(item); }).length
+      localCandidateCount: candidates.filter(function (item) { return / typ host /.test(item); }).length,
+      proxyInfo: proxyInfo
     }
   };
 }
@@ -587,7 +989,7 @@ function hasExpected(value) {
   return !(value === undefined || value === null || value === '');
 }
 function pairValue(expected, actual) {
-  return '<div class="value-pair"><div class="value-line"><span class="value-label">期望</span><code>' + escapeHtml(displayValue(expected)) + '</code></div><div class="value-line"><span class="value-label">实际</span><code>' + escapeHtml(displayValue(actual)) + '</code></div></div>';
+  return '<div class="value-pair"><div class="value-line"><span class="value-label">' + uiText('Expected') + '</span><code>' + escapeHtml(uiValue(expected)) + '</code></div><div class="value-line"><span class="value-label">' + uiText('Actual') + '</span><code>' + escapeHtml(uiValue(actual)) + '</code></div></div>';
 }
 function normalizeDisplay(value) { return displayValue(value); }
 function compareExactStatus(expected, actual) {
@@ -666,46 +1068,46 @@ function comparePlatformStatus(expected, actual) {
   return expectedPlatform && expectedPlatform === actualPlatform ? 'match' : 'mismatch';
 }
 function statusText(status, source) {
-  if (source === '效果观测' && status === 'baseline') return '已建观测基线';
-  if (source === '效果观测' && status === 'match') return '观测一致';
-  if (source === '效果观测' && status === 'mismatch') return '观测变化';
-  if (source === '运行基线' && status === 'match') return '基线一致';
-  if (source === '运行基线' && status === 'mismatch') return '基线变化';
-  if (status === 'match') return '命中';
-  if (status === 'compatible') return '口径匹配';
-  if (status === 'mismatch') return '未命中';
-  if (status === 'warning') return '风险';
-  if (status === 'unreadable') return '已配置';
-  if (status === 'unsupported') return '不可配置';
-  if (status === 'baseline') return '已建基线';
-  if (source === '未配置') return '未配置';
-  return '未采集';
+  if (source === 'Effect Check' && status === 'baseline') return 'Effect Baseline Set';
+  if (source === 'Effect Check' && status === 'match') return 'Effect Stable';
+  if (source === 'Effect Check' && status === 'mismatch') return 'Effect Changed';
+  if (source === 'Runtime Baseline' && status === 'match') return 'Baseline Match';
+  if (source === 'Runtime Baseline' && status === 'mismatch') return 'Baseline Changed';
+  if (status === 'match') return 'Match';
+  if (status === 'compatible') return 'Compatible';
+  if (status === 'mismatch') return 'Mismatch';
+  if (status === 'warning') return 'Risk';
+  if (status === 'unreadable') return 'Configured';
+  if (status === 'unsupported') return 'Unsupported';
+  if (status === 'baseline') return 'Baseline Set';
+  if (source === 'Not Configured') return 'Not Configured';
+  return 'Not Collected';
 }
 function statusClass(status, source) {
   if (status === 'match') return 'ok';
   if (status === 'compatible') return 'ok';
-  if (source === '效果观测' && status === 'mismatch') return 'warn';
-  if (source === '运行基线' && status === 'mismatch') return 'warn';
+  if (source === 'Effect Check' && status === 'mismatch') return 'warn';
+  if (source === 'Runtime Baseline' && status === 'mismatch') return 'warn';
   if (status === 'mismatch') return 'bad';
   if (status === 'warning') return 'warn';
   return 'muted';
 }
 function reasonFor(status, reason) {
   if (reason) return reason;
-  if (status === 'unknown') return '未显式配置，且本次没有可用实际值，无法建立运行基线';
-  if (status === 'match') return '实际值与期望值一致';
-  if (status === 'mismatch') return '实际值与期望值不一致';
-  if (status === 'unreadable') return '浏览器 JS 无法读取该启动配置，只展示期望值';
-  if (status === 'unsupported') return '当前内核本地实测该独立参数无效，未作为可配置期望';
-  if (status === 'baseline') return '首次采集并保存为运行基线';
+  if (status === 'unknown') return 'No explicit config and no actual value collected; runtime baseline cannot be created';
+  if (status === 'match') return 'Actual value matches expected value';
+  if (status === 'mismatch') return 'Actual value does not match expected value';
+  if (status === 'unreadable') return 'Browser JS cannot read this launch config; only expected value is shown';
+  if (status === 'unsupported') return 'Local core test shows this standalone parameter is ineffective, so it is not used as expected config';
+  if (status === 'baseline') return 'First collected value saved as runtime baseline';
   return '';
 }
 function sourceFor(status, expected, actual) {
-  if (hasExpected(expected)) return '配置期望';
-  if (status === 'baseline' || status === 'match' || status === 'mismatch') return '运行基线';
-  if (status === 'unreadable') return '配置下发';
-  if (hasObservedValue(actual)) return '未配置';
-  return '未采集';
+  if (hasExpected(expected)) return 'Config Expected';
+  if (status === 'baseline' || status === 'match' || status === 'mismatch') return 'Runtime Baseline';
+  if (status === 'unreadable') return 'Config Sent';
+  if (hasObservedValue(actual)) return 'Not Configured';
+  return 'Not Collected';
 }
 function fingerprintRow(name, expected, actual, status, reason, source) {
   return {
@@ -789,7 +1191,7 @@ function baselineValue(context, key, actual) {
 function observedExpected(context, key, explicitValue, actual, emptyExpectedText) {
   if (hasExpected(explicitValue)) return explicitValue;
   var value = baselineValue(context, key, actual);
-  return hasObservedValue(value) ? value : (emptyExpectedText || '未建立运行基线');
+  return hasObservedValue(value) ? value : (emptyExpectedText || 'No Runtime Baseline');
 }
 function observedStatus(context, key, explicitValue, actual, explicitCompare) {
   if (hasExpected(explicitValue)) return explicitCompare(explicitValue, actual);
@@ -800,22 +1202,22 @@ function observedStatus(context, key, explicitValue, actual, explicitCompare) {
 }
 function observedReason(name, explicitValue, explicitReason, status, source) {
   if (hasExpected(explicitValue)) return explicitReason;
-  if (source === '效果观测') {
-    var prefix = explicitReason || (name + ' 是效果观测值，不是配置期望');
-    if (status === 'baseline') return prefix + '；已保存首次实际值为观测基线。改过指纹配置或 Seed 后，先重建基线再刷新验证稳定性';
-    if (status === 'mismatch') return prefix + '；当前实际值与观测基线不同，说明输出已变化，不等于配置失败。若未改配置且重建基线后仍变化，才是稳定性问题';
-    if (status === 'match') return prefix + '；当前实际值与观测基线一致';
-    return prefix + '；本次没有可用实际值，无法建立观测基线';
+  if (source === 'Effect Check') {
+    var prefix = explicitReason || (name + ' is an effect observation, not expected config');
+    if (status === 'baseline') return prefix + '. Saved first actual value as effect baseline. After changing fingerprint config or Seed, reset baseline and refresh.';
+    if (status === 'mismatch') return prefix + '. Current value differs from effect baseline. This means output changed, not config failure. If config was not changed and it still changes after reset, then it is a stability issue.';
+    if (status === 'match') return prefix + '. Current value matches effect baseline.';
+    return prefix + '. No actual value is available, so effect baseline cannot be created.';
   }
-  if (status === 'baseline') return name + ' 没有显式配置值；检测页已用首次实际采集值建立运行基线，后续按基线比对';
-  if (status === 'mismatch') return name + ' 没有显式配置期望；当前实际值与运行基线不同，这是观测值变化，不代表配置未生效';
-  if (status === 'match') return name + ' 没有显式配置期望；当前实际值与运行基线一致';
-  return name + ' 没有显式配置期望，且本次没有可用实际值，无法建立运行基线';
+  if (status === 'baseline') return name + ' has no explicit config value. The first actual value was saved as runtime baseline for later comparison.';
+  if (status === 'mismatch') return name + ' has no explicit expected config. Current value differs from runtime baseline; this is an observed change, not config failure.';
+  if (status === 'match') return name + ' has no explicit expected config. Current value matches runtime baseline.';
+  return name + ' has no explicit expected config and no actual value is available, so runtime baseline cannot be created.';
 }
 function observedSource(context, key, explicitValue, actual, observedSourceName) {
-  if (hasExpected(explicitValue)) return '配置期望';
+  if (hasExpected(explicitValue)) return 'Config Expected';
   var value = baselineValue(context, key, actual);
-  return hasObservedValue(value) ? (observedSourceName || '运行基线') : '未采集';
+  return hasObservedValue(value) ? (observedSourceName || 'Runtime Baseline') : 'Not Collected';
 }
 function observedFingerprintRow(name, context, key, explicitValue, actual, explicitCompare, explicitReason, options) {
   options = options || {};
@@ -827,8 +1229,8 @@ function observedFingerprintRow(name, context, key, explicitValue, actual, expli
 }
 function effectObservedFingerprintRow(name, context, key, actual, reason) {
   return observedFingerprintRow(name, context, key, '', actual, compareExactStatus, reason, {
-    observedSourceName: '效果观测',
-    emptyExpectedText: '未建立观测基线'
+    observedSourceName: 'Effect Check',
+    emptyExpectedText: 'No Effect Baseline'
   });
 }
 function resetFingerprintBaseline(context) {
@@ -843,50 +1245,95 @@ function buildFingerprintRows(report, context) {
   var expected = context && context.expected ? context.expected : {};
   var uaVersion = report.identity.userAgent + (report.identity.userAgentData ? ' / ' + JSON.stringify(report.identity.userAgentData) : '');
   var rows = [];
-  rows.push(fingerprintRow('指纹 Seed', expected.seed, 'JS 不可读取', expected.seed ? 'unreadable' : 'unknown', 'Seed 是启动参数，页面无法从 JS 反读'));
-  rows.push(fingerprintRow('禁用原生暴露', expected.disableSpoofing, 'JS 不可读取', expected.disableSpoofing ? 'unreadable' : 'unknown', '该项是启动保护策略，页面无法从 JS 反读'));
-  rows.push(observedFingerprintRow('语言', context, 'language', expected.language, report.locale.language, compareExactStatus, '比对 navigator.language'));
-  rows.push(observedFingerprintRow('语言列表', context, 'languages', expected.acceptLanguage, report.locale.languages, compareArrayPrefixStatus, '比对 navigator.languages 前缀'));
-  rows.push(observedFingerprintRow('时区', context, 'timezone', expected.timezone, report.locale.timezone, compareExactStatus, '比对 Intl.DateTimeFormat().resolvedOptions().timeZone'));
-  rows.push(observedFingerprintRow('CPU 核心', context, 'hardwareConcurrency', expected.hardwareConcurrency, report.hardware.hardwareConcurrency, compareExactStatus, '比对 navigator.hardwareConcurrency'));
-  rows.push(observedFingerprintRow('设备内存', context, 'deviceMemory', expected.deviceMemory, report.hardware.deviceMemory, compareExactStatus, '比对 navigator.deviceMemory'));
-  rows.push(observedFingerprintRow('触控点', context, 'maxTouchPoints', expected.touchPoints, report.hardware.maxTouchPoints, compareExactStatus, '比对 navigator.maxTouchPoints'));
-  rows.push(observedFingerprintRow('Do Not Track', context, 'doNotTrack', expected.doNotTrack, report.hardware.doNotTrack, compareExactStatus, '比对 navigator.doNotTrack'));
-  rows.push(observedFingerprintRow('窗口大小', context, 'windowSize', expected.windowSize, report.screen.outerWidth + ',' + report.screen.outerHeight, compareExactStatus, '比对 window.outerWidth/outerHeight'));
-  rows.push(observedFingerprintRow('颜色深度', context, 'colorDepth', expected.colorDepth, report.screen.colorDepth, compareExactStatus, '比对 screen.colorDepth'));
-  rows.push(fingerprintRow('品牌', expected.brand, report.identity.userAgent, compareContainsStatus(expected.brand, report.identity.userAgent), '比对 User-Agent 是否包含期望品牌'));
-  rows.push(observedFingerprintRow('品牌版本', context, 'brandVersion', expected.brandVersion, report.identity.userAgent, compareBrowserVersionStatus, '优先比对完整浏览器版本；User-Agent 只暴露主版本时按主版本口径匹配'));
-  rows.push(fingerprintRow('平台', expected.platform, report.identity.platform, comparePlatformStatus(expected.platform, report.identity.platform), '比对 navigator.platform'));
-  rows.push(observedFingerprintRow('平台版本', context, 'platformVersion', expected.platformVersion, uaVersion, comparePlatformVersionStatus, '优先比对完整系统版本；User-Agent / UA-CH 只暴露短版本时按可见版本前缀匹配'));
-  rows.push(fingerprintRow('Webdriver', 'false', report.identity.webdriver ? 'true' : 'false', report.identity.webdriver ? 'mismatch' : 'match', '期望 navigator.webdriver 不暴露自动化', '内置期望'));
+  rows.push(fingerprintRow('Fingerprint Seed', expected.seed, 'JS unreadable', expected.seed ? 'unreadable' : 'unknown', 'Seed is a launch parameter and cannot be read back from page JS'));
+  rows.push(fingerprintRow('Native Exposure Disabled', expected.disableSpoofing, 'JS unreadable', expected.disableSpoofing ? 'unreadable' : 'unknown', 'This is a launch protection policy and cannot be read back from page JS'));
+  rows.push(observedFingerprintRow('Language', context, 'language', expected.language, report.locale.language, compareExactStatus, 'Compare navigator.language'));
+  rows.push(observedFingerprintRow('Languages', context, 'languages', expected.acceptLanguage, report.locale.languages, compareArrayPrefixStatus, 'Compare navigator.languages prefix'));
+  rows.push(observedFingerprintRow('Timezone', context, 'timezone', expected.timezone, report.locale.timezone, compareExactStatus, 'Compare Intl.DateTimeFormat().resolvedOptions().timeZone'));
+  rows.push(observedFingerprintRow('CPU Cores', context, 'hardwareConcurrency', expected.hardwareConcurrency, report.hardware.hardwareConcurrency, compareExactStatus, 'Compare navigator.hardwareConcurrency'));
+  rows.push(observedFingerprintRow('Device Memory', context, 'deviceMemory', expected.deviceMemory, report.hardware.deviceMemory, compareExactStatus, 'Compare navigator.deviceMemory'));
+  rows.push(observedFingerprintRow('Touch Points', context, 'maxTouchPoints', expected.touchPoints, report.hardware.maxTouchPoints, compareExactStatus, 'Compare navigator.maxTouchPoints'));
+  rows.push(observedFingerprintRow('Do Not Track', context, 'doNotTrack', expected.doNotTrack, report.hardware.doNotTrack, compareExactStatus, 'Compare navigator.doNotTrack'));
+  rows.push(observedFingerprintRow('Window Size', context, 'windowSize', expected.windowSize, report.screen.outerWidth + ',' + report.screen.outerHeight, compareExactStatus, 'Compare window.outerWidth/outerHeight'));
+  rows.push(observedFingerprintRow('Color Depth', context, 'colorDepth', expected.colorDepth, report.screen.colorDepth, compareExactStatus, 'Compare screen.colorDepth'));
+  rows.push(fingerprintRow('Brand', expected.brand, report.identity.userAgent, compareContainsStatus(expected.brand, report.identity.userAgent), 'Compare whether User-Agent contains expected brand'));
+  rows.push(observedFingerprintRow('Brand Version', context, 'brandVersion', expected.brandVersion, report.identity.userAgent, compareBrowserVersionStatus, 'Prefer full browser version comparison; if User-Agent exposes only major version, compare by major version'));
+  rows.push(fingerprintRow('Platform', expected.platform, report.identity.platform, comparePlatformStatus(expected.platform, report.identity.platform), 'Compare navigator.platform'));
+  rows.push(observedFingerprintRow('Platform Version', context, 'platformVersion', expected.platformVersion, uaVersion, comparePlatformVersionStatus, 'Prefer full platform version comparison; if User-Agent / UA-CH exposes short version only, compare visible prefix'));
+  rows.push(fingerprintRow('Webdriver', 'false', report.identity.webdriver ? 'true' : 'false', report.identity.webdriver ? 'mismatch' : 'match', 'Expected navigator.webdriver not to expose automation', 'Built-in Expected'));
   var expectsWebRTCBlocked = hasExpected(expected.webrtcPolicy);
-  rows.push(fingerprintRow('WebRTC Host', expectsWebRTCBlocked ? '0 host candidates' : '', report.network.localCandidateCount + ' host candidates', expectsWebRTCBlocked ? (report.network.localCandidateCount > 0 ? 'mismatch' : 'match') : 'unknown', expectsWebRTCBlocked ? '比对是否暴露本机 host candidate' : '未配置 WebRTC 期望，只展示实际采集值'));
-  rows.push(fingerprintRow('媒体设备数量', '不作为期望', 'JS 不可读取', 'unsupported', '媒体设备数量独立参数本地 Chrom-144 实测无效，未作为运行参数传递', '实测无效'));
-  rows.push(fingerprintRow('Canvas 噪声', expected.canvasNoise, 'JS 不可读取', expected.canvasNoise ? 'unreadable' : 'unknown', 'Canvas 噪声开关已作为启动参数下发；页面不能直接反读开关，效果看 Canvas Hash 是否稳定变化'));
-  rows.push(fingerprintRow('Audio 噪声', '不作为期望', 'JS 不可读取', 'unsupported', 'Audio 独立噪声参数本地 Chrom-144 实测无效；音频变化通过 Seed 和 Audio Hash 观察', '实测无效'));
-  rows.push(fingerprintRow('ClientRects 噪声', expected.clientRectsNoise, 'JS 不可读取', expected.clientRectsNoise ? 'unreadable' : 'unknown', 'ClientRects 噪声开关已作为启动参数下发；页面不能直接反读开关，效果看 ClientRects Hash 是否稳定变化'));
-  rows.push(effectObservedFingerprintRow('Canvas Hash', context, 'canvasHash', report.advanced.canvasHash, expected.canvasNoise ? 'Canvas Hash 是 Canvas 噪声效果观测值，不是配置期望' : 'Canvas Hash 是检测输出哈希，不是配置期望'));
-  rows.push(effectObservedFingerprintRow('Audio Hash', context, 'audioHash', report.advanced.audioHash, 'Audio Hash 是检测输出哈希，不是配置期望'));
-  rows.push(effectObservedFingerprintRow('ClientRects Hash', context, 'clientRectsHash', report.advanced.clientRectsHash, expected.clientRectsNoise ? 'ClientRects Hash 是 ClientRects 噪声效果观测值，不是配置期望' : 'ClientRects Hash 是检测输出哈希，不是配置期望'));
-  rows.push(effectObservedFingerprintRow('Fonts Hash', context, 'fontHash', report.advanced.fontHash, 'Fonts Hash 是检测输出哈希，不是配置期望'));
-  rows.push(observedFingerprintRow('Detected Fonts', context, 'detectedFonts', expected.fontList, report.advanced.detectedFonts, compareArrayContainsAllStatus, '比对检测到的字体是否包含配置列表'));
-  rows.push(observedFingerprintRow('WebGL Vendor', context, 'webglVendor', expected.webGLVendor || expected.webglVendor, report.advanced.webglVendor, compareExactStatus, '比对 WebGL Vendor'));
-  rows.push(observedFingerprintRow('WebGL Renderer', context, 'webglRenderer', expected.webGLRenderer || expected.webglRenderer, report.advanced.webglRenderer, compareExactStatus, '比对 WebGL Renderer'));
-  rows.push(effectObservedFingerprintRow('WebGL Hash', context, 'webglHash', report.advanced.webglHash, 'WebGL Hash 是检测输出哈希，不是配置期望'));
-  rows.push(observedFingerprintRow('Plugins', context, 'plugins', '', report.advanced.plugins, compareExactStatus, '比对插件列表'));
-  rows.push(observedFingerprintRow('MIME Types', context, 'mimeTypes', '', report.advanced.mimeTypes, compareExactStatus, '比对 MIME 列表'));
-  rows.push(observedFingerprintRow('屏幕尺寸', context, 'screenSize', '', report.screen.width + 'x' + report.screen.height, compareExactStatus, '比对屏幕尺寸'));
-  rows.push(observedFingerprintRow('DPR', context, 'devicePixelRatio', '', report.screen.devicePixelRatio, compareExactStatus, '比对 DPR'));
+  rows.push(fingerprintRow('WebRTC Host', expectsWebRTCBlocked ? '0 host candidates' : '', report.network.localCandidateCount + ' host candidates', expectsWebRTCBlocked ? (report.network.localCandidateCount > 0 ? 'mismatch' : 'match') : 'unknown', expectsWebRTCBlocked ? 'Compare whether local host candidate is exposed' : 'No WebRTC expected value configured; showing actual collected value only'));
+  rows.push(fingerprintRow('Media Device Count', 'Not used as expected', 'JS unreadable', 'unsupported', 'Standalone media device count parameter is ineffective in local Chrom-144 test and is not passed as runtime parameter', 'Known Ineffective'));
+  rows.push(fingerprintRow('Canvas Noise', expected.canvasNoise, 'JS unreadable', expected.canvasNoise ? 'unreadable' : 'unknown', 'Canvas noise flag is passed as a launch parameter; page JS cannot read the flag directly. Check Canvas Hash stability for effect.'));
+  rows.push(fingerprintRow('Audio Noise', 'Not used as expected', 'JS unreadable', 'unsupported', 'Standalone audio noise parameter is ineffective in local Chrom-144 test; observe audio changes through Seed and Audio Hash', 'Known Ineffective'));
+  rows.push(fingerprintRow('ClientRects Noise', expected.clientRectsNoise, 'JS unreadable', expected.clientRectsNoise ? 'unreadable' : 'unknown', 'ClientRects noise flag is passed as a launch parameter; page JS cannot read the flag directly. Check ClientRects Hash stability for effect.'));
+  rows.push(effectObservedFingerprintRow('Canvas Hash', context, 'canvasHash', report.advanced.canvasHash, expected.canvasNoise ? 'Canvas Hash is an effect observation for Canvas noise, not expected config' : 'Canvas Hash is detected output hash, not expected config'));
+  rows.push(effectObservedFingerprintRow('Audio Hash', context, 'audioHash', report.advanced.audioHash, 'Audio Hash is detected output hash, not expected config'));
+  rows.push(effectObservedFingerprintRow('ClientRects Hash', context, 'clientRectsHash', report.advanced.clientRectsHash, expected.clientRectsNoise ? 'ClientRects Hash is an effect observation for ClientRects noise, not expected config' : 'ClientRects Hash is detected output hash, not expected config'));
+  rows.push(effectObservedFingerprintRow('Fonts Hash', context, 'fontHash', report.advanced.fontHash, 'Fonts Hash is detected output hash, not expected config'));
+  rows.push(observedFingerprintRow('Detected Fonts', context, 'detectedFonts', expected.fontList, report.advanced.detectedFonts, compareArrayContainsAllStatus, 'Compare whether detected fonts include configured list'));
+  rows.push(observedFingerprintRow('WebGL Vendor', context, 'webglVendor', expected.webGLVendor || expected.webglVendor, report.advanced.webglVendor, compareExactStatus, 'Compare WebGL Vendor'));
+  rows.push(observedFingerprintRow('WebGL Renderer', context, 'webglRenderer', expected.webGLRenderer || expected.webglRenderer, report.advanced.webglRenderer, compareExactStatus, 'Compare WebGL Renderer'));
+  rows.push(effectObservedFingerprintRow('WebGL Hash', context, 'webglHash', report.advanced.webglHash, 'WebGL Hash is detected output hash, not expected config'));
+  rows.push(observedFingerprintRow('Plugins', context, 'plugins', '', report.advanced.plugins, compareExactStatus, 'Compare plugin list'));
+  rows.push(observedFingerprintRow('MIME Types', context, 'mimeTypes', '', report.advanced.mimeTypes, compareExactStatus, 'Compare MIME list'));
+  rows.push(observedFingerprintRow('Screen Size', context, 'screenSize', '', report.screen.width + 'x' + report.screen.height, compareExactStatus, 'Compare screen size'));
+  rows.push(observedFingerprintRow('DPR', context, 'devicePixelRatio', '', report.screen.devicePixelRatio, compareExactStatus, 'Compare DPR'));
   return rows;
 }
 function shouldShowReason(status) {
   return status === 'mismatch' || status === 'warning' || status === 'unreadable' || status === 'unsupported' || status === 'baseline' || status === 'unknown';
 }
 function renderFingerprintTable(rows) {
-  return '<section><h2>指纹对比</h2><table><thead><tr><th>指纹项</th><th>值</th><th>期望来源</th><th>结果</th><th>原因</th></tr></thead><tbody>' + rows.map(function (item) {
+  return '<section><h2>' + uiText('Fingerprint Check') + '</h2><table><thead><tr><th>' + uiText('Item') + '</th><th>' + uiText('Value') + '</th><th>' + uiText('Expected Source') + '</th><th>' + uiText('Result') + '</th><th>' + uiText('Reason') + '</th></tr></thead><tbody>' + rows.map(function (item) {
     var reason = shouldShowReason(item.status) ? item.reason : '';
-    return '<tr><td class="item">' + escapeHtml(item.name) + '</td><td>' + pairValue(item.expected, item.actual) + '</td><td class="source">' + escapeHtml(item.source) + '</td><td class="hit ' + statusClass(item.status, item.source) + '">' + statusText(item.status, item.source) + '</td><td class="reason">' + escapeHtml(reason) + '</td></tr>';
+    return '<tr><td class="item">' + escapeHtml(uiText(item.name)) + '</td><td>' + pairValue(item.expected, item.actual) + '</td><td class="source">' + escapeHtml(uiText(item.source)) + '</td><td class="hit ' + statusClass(item.status, item.source) + '">' + uiText(statusText(item.status, item.source)) + '</td><td class="reason">' + escapeHtml(uiText(reason)) + '</td></tr>';
   }).join('') + '</tbody></table></section>';
+}
+function proxyDisplayValue(value) {
+  if (value === undefined || value === null || value === '') return '-';
+  return String(value);
+}
+function proxyEndpoint(proxy) {
+  if (!proxy || proxy.direct) return uiText('Direct');
+  if (proxy.host) return proxy.host + (proxy.port ? ':' + proxy.port : '');
+  return proxy.summary || uiText('No endpoint');
+}
+function proxyLocation(info) {
+  if (!info || !info.ok) return '-';
+  return [info.country, info.region, info.city].filter(Boolean).join(' / ') || uiText('No location');
+}
+function proxyLine(label, value) {
+  return '<div class="proxy-line"><span class="proxy-label">' + uiText(label) + '</span><span class="proxy-value">' + escapeHtml(proxyDisplayValue(value)) + '</span></div>';
+}
+function proxyStatusLine(label, text, status) {
+  return '<div class="proxy-line"><span class="proxy-label">' + uiText(label) + '</span><span class="proxy-value"><span class="proxy-status ' + escapeHtml(status) + '">' + uiText(text) + '</span></span></div>';
+}
+function renderProxyCheck(report) {
+  var proxy = latestContext && latestContext.proxy ? latestContext.proxy : {};
+  var network = report && report.network ? report.network : {};
+  var info = network.proxyInfo || {};
+  var configStatus = proxy.direct ? 'warn' : (proxy.configured ? 'ok' : 'warn');
+  var configText = proxy.direct ? 'Direct' : (proxy.configured ? 'Configured' : 'No proxy configured');
+  var exitStatus = info.ok ? 'ok' : 'bad';
+  var exitText = info.ok ? 'Detected' : 'Detection Failed';
+  var configLines = [
+    proxyStatusLine('Status', configText, configStatus),
+    proxyLine('Name', proxy.proxyName || proxy.proxyId || '-'),
+    proxyLine('Type', proxy.type || '-'),
+    proxyLine('Endpoint', proxyEndpoint(proxy)),
+    proxyLine('Auth', proxy.hasAuth ? uiText('Yes') : uiText('No')),
+    proxyLine('Group', proxy.groupName || '-')
+  ].join('');
+  var exitLines = [
+    proxyStatusLine('Status', exitText, exitStatus),
+    proxyLine('Current IP', info.ip || '-'),
+    proxyLine('Location', proxyLocation(info)),
+    proxyLine('ISP/Org', info.org || '-'),
+    proxyLine('Latency', info.ok ? String(info.latencyMs || 0) + ' ms' : '-'),
+    proxyLine('Source', info.source || (info.error ? uiText(info.error) : '-'))
+  ].join('');
+  return '<section class="proxy-panel"><h2>' + uiText('Proxy Check') + '</h2><div class="proxy-grid"><div class="proxy-card"><div class="proxy-title">' + uiText('Configured Proxy') + '</div><div class="proxy-lines">' + configLines + '</div></div><div class="proxy-card"><div class="proxy-title">' + uiText('Browser Exit') + '</div><div class="proxy-lines">' + exitLines + '</div></div></div></section>';
 }
 function valueAtPath(source, path) {
   return path.split('.').reduce(function (current, key) {
@@ -906,7 +1353,7 @@ function displayObservedValue(value) {
   return String(value);
 }
 var changeCompareFields = [
-  ['配置 Seed', 'context.expected.seed'],
+  ['Config Seed', 'context.expected.seed'],
   ['Canvas Hash', 'advanced.canvasHash'],
   ['Audio Hash', 'advanced.audioHash'],
   ['ClientRects Hash', 'advanced.clientRectsHash'],
@@ -917,22 +1364,22 @@ var changeCompareFields = [
   ['WebGL Hash', 'advanced.webglHash'],
   ['Plugins', 'advanced.plugins'],
   ['MIME Types', 'advanced.mimeTypes'],
-  ['屏幕尺寸', 'screen.width'],
-  ['屏幕高度', 'screen.height'],
+  ['Screen Size', 'screen.width'],
+  ['Screen Height', 'screen.height'],
   ['DPR', 'screen.devicePixelRatio'],
-  ['语言', 'locale.language'],
-  ['语言列表', 'locale.languages'],
-  ['时区', 'locale.timezone'],
-  ['CPU 核心', 'hardware.hardwareConcurrency'],
-  ['设备内存', 'hardware.deviceMemory'],
-  ['触控点', 'hardware.maxTouchPoints'],
+  ['Language', 'locale.language'],
+  ['Languages', 'locale.languages'],
+  ['Timezone', 'locale.timezone'],
+  ['CPU Cores', 'hardware.hardwareConcurrency'],
+  ['Device Memory', 'hardware.deviceMemory'],
+  ['Touch Points', 'hardware.maxTouchPoints'],
   ['User-Agent', 'identity.userAgent'],
   ['Platform', 'identity.platform']
 ];
 function renderChangeComparison(report) {
   var target = document.getElementById('changeApp');
   if (!latestBeforeSnapshot) {
-    target.innerHTML = '<div class="diff-empty">未保存修改前快照。要看改 Seed 后哪些项变化：先在旧配置下点“保存修改前快照”，改配置并重启实例后再点“重新检测”。</div>';
+    target.innerHTML = '<div class="diff-empty">' + uiText('No before snapshot saved. To compare changes after Seed/config edits: run the old config, click Save Before, edit config and restart the instance, then click Refresh.') + '</div>';
     return;
   }
   var beforeReport = beforeSnapshotReport(latestBeforeSnapshot) || {};
@@ -945,9 +1392,9 @@ function renderChangeComparison(report) {
     var beforeValue = valueAtPath(beforeCompareSource, field[1]);
     var currentValue = valueAtPath(currentCompareSource, field[1]);
     var changed = !sameObservedValue(beforeValue, currentValue);
-    return '<tr><td class="item">' + escapeHtml(field[0]) + '</td><td>' + pairValue(displayObservedValue(beforeValue), displayObservedValue(currentValue)) + '</td><td class="source">修改前后</td><td class="hit ' + (changed ? 'warn' : 'ok') + '">' + (changed ? '已变化' : '未变化') + '</td><td class="reason">' + escapeHtml('修改前 ' + beforeTime + ' / 当前 ' + currentTime) + '</td></tr>';
+    return '<tr><td class="item">' + escapeHtml(uiText(field[0])) + '</td><td>' + pairValue(displayObservedValue(beforeValue), displayObservedValue(currentValue)) + '</td><td class="source">' + uiText('Before/After') + '</td><td class="hit ' + (changed ? 'warn' : 'ok') + '">' + uiText(changed ? 'Changed' : 'Unchanged') + '</td><td class="reason">' + escapeHtml(uiText('Before ') + beforeTime + uiText(' / Current ') + currentTime) + '</td></tr>';
   }).join('');
-  target.innerHTML = '<section><h2>修改前后变化</h2><table><thead><tr><th>指纹项</th><th>值</th><th>来源</th><th>结果</th><th>时间</th></tr></thead><tbody>' + rows + '</tbody></table></section>';
+  target.innerHTML = '<section><h2>' + uiText('Before/After Changes') + '</h2><table><thead><tr><th>' + uiText('Item') + '</th><th>' + uiText('Value') + '</th><th>' + uiText('Source') + '</th><th>' + uiText('Result') + '</th><th>' + uiText('Time') + '</th></tr></thead><tbody>' + rows + '</tbody></table></section>';
 }
 function padDatePart(value) { return String(value).padStart(2, '0'); }
 function formatLocalDateTime(isoText) {
@@ -961,17 +1408,19 @@ function reportAgeMs(report) {
   return Date.now() - time;
 }
 function renderMeta(report) {
-  var parts = ['检测时间：本地 ' + formatLocalDateTime(report.generatedAt), 'UTC ' + report.generatedAt];
+  var parts = [uiText('Checked: Local ') + formatLocalDateTime(report.generatedAt), 'UTC ' + report.generatedAt];
   if (report.urlProfileId) parts.push('Profile: ' + report.urlProfileId);
   document.getElementById('meta').textContent = parts.join(' / ');
 }
 function escapeHtml(text) { return String(text).replace(/[&<>"']/g, function (m) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]; }); }
 function render(report) {
+  updateUILanguage(report);
   var rows = buildFingerprintRows(report, latestContext);
   report.rows = rows;
   renderMeta(report);
   document.getElementById('summary').innerHTML = '';
   renderChangeComparison(report);
+  document.getElementById('proxyApp').innerHTML = renderProxyCheck(report);
   document.getElementById('app').innerHTML = renderFingerprintTable(rows);
 }
 async function run() {
@@ -997,6 +1446,7 @@ document.getElementById('copyBtn').onclick = function () {
   navigator.clipboard.writeText(JSON.stringify(latestReport, null, 2)).catch(function () {});
 };
 setInterval(maybeAutoRefresh, FINGERPRINT_AUTO_REFRESH_CHECK_MS);
+updateUILanguage(null);
 loadBeforeSnapshot(latestContext);
 run();
 </script>

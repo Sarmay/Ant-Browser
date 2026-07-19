@@ -47,7 +47,13 @@ func TestEnsureFingerprintCheckPageURL(t *testing.T) {
 	}
 	text := string(content)
 	if !strings.Contains(text, "Ant 指纹检测") || !strings.Contains(text, "指纹项") || !strings.Contains(text, "期望来源") || !strings.Contains(text, "结果") {
-		t.Fatalf("generated page missing expected content")
+		t.Fatalf("generated page missing default Chinese content")
+	}
+	if !strings.Contains(text, "Ant Fingerprint Check") || !strings.Contains(text, "Fingerprint Check") || !strings.Contains(text, "Reset Baseline") {
+		t.Fatalf("generated page missing English fallback content")
+	}
+	if !strings.Contains(text, "\"Microsoft YaHei\"") || !strings.Contains(text, "\"Noto Sans SC\"") || !strings.Contains(text, "\"WenQuanYi Micro Hei\"") {
+		t.Fatalf("generated page missing font fallbacks")
 	}
 	if strings.Contains(text, "是否命中") {
 		t.Fatalf("generated page still contains old ambiguous result header")
@@ -58,7 +64,7 @@ func TestEnsureFingerprintCheckPageURL(t *testing.T) {
 	if !strings.Contains(text, "outerWidth") || !strings.Contains(text, "比对 window.outerWidth/outerHeight") {
 		t.Fatalf("generated page missing window outer size comparison")
 	}
-	if strings.Contains(text, "比对 window.innerWidth/innerHeight") {
+	if strings.Contains(text, "Compare window.innerWidth/innerHeight") {
 		t.Fatalf("generated page still compares window inner size for --window-size")
 	}
 	if !strings.Contains(text, "formatLocalDateTime") || !strings.Contains(text, "检测时间：本地") || !strings.Contains(text, "UTC ") {
@@ -100,13 +106,13 @@ func TestFingerprintCheckPageBuildsRuntimeBaseline(t *testing.T) {
 	if !strings.Contains(text, "resetBaselineBtn") || !strings.Contains(text, "resetFingerprintBaseline") || !strings.Contains(text, "重建基线") {
 		t.Fatalf("generated page missing runtime baseline reset action")
 	}
-	if !strings.Contains(text, "首次采集并保存为运行基线") || !strings.Contains(text, "检测页已用首次实际采集值建立运行基线") {
+	if !strings.Contains(text, "首次采集并保存为运行基线") || !strings.Contains(text, "首次实际值") {
 		t.Fatalf("generated page missing runtime baseline marker")
 	}
-	if !strings.Contains(text, "基线一致") || !strings.Contains(text, "基线变化") || !strings.Contains(text, "不代表配置未生效") {
+	if !strings.Contains(text, "基线一致") || !strings.Contains(text, "基线变化") || !strings.Contains(text, "不代表配置") {
 		t.Fatalf("generated page missing runtime baseline change labels")
 	}
-	if !strings.Contains(text, "效果观测") || !strings.Contains(text, "观测变化") || !strings.Contains(text, "不等于配置失败") {
+	if !strings.Contains(text, "效果观测") || !strings.Contains(text, "观测变化") || !strings.Contains(text, "不代表配置") {
 		t.Fatalf("generated page missing fingerprint effect observation labels")
 	}
 	if !strings.Contains(text, "保存修改前快照") || !strings.Contains(text, "修改前后变化") || !strings.Contains(text, "changeSnapshotStorageKey") {
@@ -118,7 +124,7 @@ func TestFingerprintCheckPageBuildsRuntimeBaseline(t *testing.T) {
 	if !strings.Contains(text, "beforeSnapshotReport") || !strings.Contains(text, "beforeSnapshotContext") || !strings.Contains(text, "context.expected.seed") {
 		t.Fatalf("generated page missing before/after context comparison")
 	}
-	if !strings.Contains(text, "未建立观测基线") || !strings.Contains(text, "改过指纹配置或 Seed 后，先重建基线再刷新验证稳定性") {
+	if !strings.Contains(text, "未建立观测基线") || !strings.Contains(text, "改过指纹配置或 Seed 后") {
 		t.Fatalf("generated page missing effect observation baseline guidance")
 	}
 	if !strings.Contains(text, "配置期望") || !strings.Contains(text, "运行基线") || !strings.Contains(text, "已建基线") {
@@ -135,6 +141,24 @@ func TestFingerprintCheckPageBuildsRuntimeBaseline(t *testing.T) {
 	}
 	if strings.Contains(text, "无期望") {
 		t.Fatalf("generated page still contains misleading unknown expectation text")
+	}
+}
+
+func TestFingerprintCheckPageUsesEnglishForLinuxAndMac(t *testing.T) {
+	app := NewApp(t.TempDir())
+	linuxContext, err := app.buildFingerprintCheckPageContextForExpectedArgs("profile-linux", []string{"--fingerprint-platform=linux"})
+	if err != nil {
+		t.Fatalf("build linux context error = %v", err)
+	}
+	if !strings.Contains(string(linuxContext), "\"uiLanguage\": \"en\"") {
+		t.Fatalf("linux fingerprint page context should use English UI: %s", linuxContext)
+	}
+	macContext, err := app.buildFingerprintCheckPageContextForExpectedArgs("profile-mac", []string{"--fingerprint-platform=mac"})
+	if err != nil {
+		t.Fatalf("build mac context error = %v", err)
+	}
+	if !strings.Contains(string(macContext), "\"uiLanguage\": \"en\"") {
+		t.Fatalf("mac fingerprint page context should use English UI: %s", macContext)
 	}
 }
 
@@ -175,6 +199,47 @@ func TestFingerprintCheckPageContextUsesAdaptedArgs(t *testing.T) {
 	}
 	if context.Expected.DisableSpoofing != "gpu" {
 		t.Fatalf("disableSpoofing = %q, want gpu", context.Expected.DisableSpoofing)
+	}
+}
+
+func TestFingerprintCheckPageContextIncludesSanitizedProxyInfo(t *testing.T) {
+	appRoot := t.TempDir()
+	app := NewApp(appRoot)
+	app.config = &config.Config{}
+	app.browserMgr = browser.NewManager(app.config, app.appRoot)
+	app.config.Browser.Proxies = []browser.Proxy{
+		{
+			ProxyId:     "proxy-auth",
+			ProxyName:   "Local Auth Proxy",
+			ProxyConfig: "http://ant:secret-pass@127.0.0.1:18080",
+			GroupName:   "Auth Group",
+		},
+	}
+	app.browserMgr.Profiles["profile-proxy"] = &browser.Profile{
+		ProfileId:   "profile-proxy",
+		ProxyId:     "proxy-auth",
+		ProxyConfig: "http://ant:secret-pass@127.0.0.1:18080",
+	}
+
+	data, err := app.buildFingerprintCheckPageContext("profile-proxy")
+	if err != nil {
+		t.Fatalf("buildFingerprintCheckPageContext error = %v", err)
+	}
+	if strings.Contains(string(data), "secret-pass") {
+		t.Fatalf("fingerprint context leaked proxy password: %s", data)
+	}
+	var context fingerprintCheckPageContext
+	if err := json.Unmarshal(data, &context); err != nil {
+		t.Fatalf("unmarshal context error = %v", err)
+	}
+	if !context.Proxy.Configured || context.Proxy.Direct {
+		t.Fatalf("proxy context configured/direct = %v/%v, want configured non-direct", context.Proxy.Configured, context.Proxy.Direct)
+	}
+	if context.Proxy.ProxyName != "Local Auth Proxy" || context.Proxy.GroupName != "Auth Group" {
+		t.Fatalf("proxy name/group = %q/%q", context.Proxy.ProxyName, context.Proxy.GroupName)
+	}
+	if context.Proxy.Type != "http" || context.Proxy.Host != "127.0.0.1" || context.Proxy.Port != "18080" || !context.Proxy.HasAuth {
+		t.Fatalf("proxy descriptor = type %q host %q port %q auth %v", context.Proxy.Type, context.Proxy.Host, context.Proxy.Port, context.Proxy.HasAuth)
 	}
 }
 
