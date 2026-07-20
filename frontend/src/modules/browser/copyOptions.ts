@@ -40,7 +40,7 @@ const LEGACY_AUTOMATION_TARGET_ALIASES: Partial<Record<BrowserProfileAutomationT
 export const DEFAULT_BROWSER_PROFILE_AUTOMATION_TARGETS: BrowserProfileAutomationTarget[] = ['seed']
 
 export function createBrowserProfileCopyOptions(
-  mode: BrowserProfileCopyMode = 'regular',
+  mode: BrowserProfileCopyMode = 'auto_fingerprint',
   automationTargets: BrowserProfileAutomationTarget[] = DEFAULT_BROWSER_PROFILE_AUTOMATION_TARGETS,
 ): BrowserProfileCopyOptions {
   return {
