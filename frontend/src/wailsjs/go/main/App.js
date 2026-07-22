@@ -578,6 +578,10 @@ export function OpenUserDataDir(arg1) {
   return window['go']['main']['App']['OpenUserDataDir'](arg1);
 }
 
+export function OpenUserDataRoot() {
+  return window['go']['main']['App']['OpenUserDataRoot']();
+}
+
 export function QuitAppOnly() {
   return window['go']['main']['App']['QuitAppOnly']();
 }

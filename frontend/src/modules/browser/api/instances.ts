@@ -105,3 +105,12 @@ export async function openUserDataDir(userDataDir: string): Promise<boolean> {
   }
   return false
 }
+
+export async function openUserDataRoot(): Promise<boolean> {
+  const bindings: any = await getBindings()
+  if (bindings?.OpenUserDataRoot) {
+    await bindings.OpenUserDataRoot()
+    return true
+  }
+  return false
+}
