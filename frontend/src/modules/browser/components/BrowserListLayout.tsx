@@ -1,4 +1,4 @@
-﻿import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Archive, CheckCircle, ChevronRight, ChevronUp, Edit2, LayoutGrid, List, Play, Plus, RefreshCw, Sliders, Star, Trash2, Upload, XCircle } from 'lucide-react'
 
 import { Button, Card, FormItem, Input, Modal, Switch, Table, Textarea } from '../../../shared/components'
@@ -289,8 +289,8 @@ export function BrowserListSettingsModal({
             />
           </div>
         </FormItem>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormItem label="启动就绪超时（毫秒）" hint="默认 3000，慢机器可调到 5000-10000">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+          <FormItem label="启动就绪超时（毫秒）">
             <Input
               type="number"
               min={1000}
@@ -304,7 +304,7 @@ export function BrowserListSettingsModal({
               placeholder="3000"
             />
           </FormItem>
-          <FormItem label="启动稳定窗口（毫秒）" hint="建议 1200-3000">
+          <FormItem label="启动稳定窗口（毫秒）">
             <Input
               type="number"
               min={0}
