@@ -43,6 +43,17 @@ func TestCreateKeepsExplicitFingerprintArgs(t *testing.T) {
 	assertStringSliceContains(t, profile.FingerprintArgs, "--fingerprint=123")
 }
 
+func TestCreateNormalizesRestoreLastSessionMode(t *testing.T) {
+	manager := NewManager(&config.Config{}, t.TempDir())
+	profile, err := manager.Create(ProfileInput{ProfileName: "test", RestoreLastSession: "true"})
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if profile.RestoreLastSession != RestoreLastSessionEnabled {
+		t.Fatalf("restoreLastSession = %q, want %q", profile.RestoreLastSession, RestoreLastSessionEnabled)
+	}
+}
+
 func assertStringSliceContains(t *testing.T, values []string, expected string) {
 	t.Helper()
 	for _, value := range values {

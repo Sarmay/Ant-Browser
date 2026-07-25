@@ -314,6 +314,8 @@ export function SaveBrowserProxies(arg1:Array<config.BrowserProxy>):Promise<void
 
 export function SaveBrowserSettings(arg1:browser.Settings):Promise<void>;
 
+export function SaveLaunchServerSettings(arg1:number):Promise<Record<string, any>>;
+
 export function SaveProxyCheckSettings(arg1:config.ProxyCheckConfig):Promise<void>;
 
 export function SetLogLevel(arg1:string):Promise<void>;

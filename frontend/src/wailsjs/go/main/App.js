@@ -610,6 +610,10 @@ export function SaveBrowserSettings(arg1) {
   return window['go']['main']['App']['SaveBrowserSettings'](arg1);
 }
 
+export function SaveLaunchServerSettings(arg1) {
+  return window['go']['main']['App']['SaveLaunchServerSettings'](arg1);
+}
+
 export function SaveProxyCheckSettings(arg1) {
   return window['go']['main']['App']['SaveProxyCheckSettings'](arg1);
 }

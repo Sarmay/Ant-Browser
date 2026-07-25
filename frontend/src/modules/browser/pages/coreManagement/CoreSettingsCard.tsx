@@ -27,7 +27,7 @@ export function CoreSettingsCard({ settings, onEdit }: CoreSettingsCardProps) {
         <SettingsList label="默认指纹参数" values={settings.defaultFingerprintArgs} />
         <SettingsList label="默认启动参数" values={settings.defaultLaunchArgs} />
         <SettingsList label="默认启动页面" values={settings.defaultStartUrls} />
-        <SettingsValue label="恢复上次标签页" value={settings.restoreLastSession ? '开启' : '关闭'} />
+        <SettingsValue label="默认恢复历史标签" value={settings.restoreLastSession ? '开启' : '关闭'} />
         <SettingsValue label="轻启动模式" value={settings.lightStartEnabled ? '开启' : '关闭'} />
         <SettingsValue label="启动就绪超时" value={`${settings.startReadyTimeoutMs} ms`} />
         <SettingsValue label="启动稳定窗口" value={`${settings.startStableWindowMs} ms`} />

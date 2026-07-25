@@ -28,6 +28,7 @@ type browserStartPlan struct {
 	args                 []string
 	extensionDirs        []string
 	deferredStartTargets []string
+	deferredStartNewTabs bool
 	effectiveProxy       string
 	acquiredProxyBridge  profileProxyBridgeRef
 	releaseProxyBridge   bool
@@ -137,12 +138,12 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 	startReadyTimeout, startStableWindow := a.browserStartTimingSettings()
 	maxStartAttempts := browserStartAttemptCount()
 	totalReadyTimeout := time.Duration(maxStartAttempts) * startReadyTimeout
-	restoreLastSession := browserRestoreLastSession(a.config)
+	restoreLastSession := profileRestoreLastSession(profile, a.config)
 	extensionDirs := a.browserMgr.EnabledExtensionDirsForProfile(input.ProfileID)
 	fingerprintExpectedArgs := combineFingerprintExpectedArgs(fingerprintLaunchArgs, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs)
 	defaultStartURLs := a.resolveFingerprintCheckStartURLsForExpectedArgsAndProfile(profile.ProfileId, fingerprintExpectedArgs, profile, mergeStartURLs(browserDefaultStartURLs(a.config), bookmarkStartURLs(bookmarks)))
 	startURLs := a.resolveFingerprintCheckStartURLsForExpectedArgsAndProfile(profile.ProfileId, fingerprintExpectedArgs, profile, input.StartURLs)
-	launchTargets, deferredStartTargets := buildBrowserLaunchTargets(
+	launchTargets, deferredStartTargets, deferredStartNewTabs := buildBrowserLaunchTargets(
 		startURLs,
 		defaultStartURLs,
 		input.SkipDefaultStartURLs,
@@ -169,6 +170,7 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 		extensionDirs:        extensionDirs,
 		args:                 buildBrowserLaunchArgs(userDataDir, assignedDebugPort, effectiveProxy, extensionDirs, fingerprintLaunchArgs, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, launchTargets),
 		deferredStartTargets: deferredStartTargets,
+		deferredStartNewTabs: deferredStartNewTabs,
 		effectiveProxy:       effectiveProxy,
 		acquiredProxyBridge:  acquiredProxyBridge,
 		releaseProxyBridge:   releaseProxyBridge,
@@ -263,7 +265,7 @@ func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *Brow
 		return nil, nil, nil, "", "", errBrowserStartHandledByRecoveredRuntime
 	}
 
-	if !browserRestoreLastSession(a.config) {
+	if !profileRestoreLastSession(profile, a.config) {
 		if err := clearBrowserSessionRestoreData(userDataDir); err != nil {
 			if terminated, terminateErr := terminateBrowserProcessesByUserDataDir(userDataDir, 5*time.Second); terminateErr == nil && terminated {
 				log.Warn("会话缓存被旧浏览器进程占用，已结束占用进程并重试清理",

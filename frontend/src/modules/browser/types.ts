@@ -3,6 +3,7 @@
   profileName: string
   userDataDir: string
   coreId: string
+  restoreLastSession?: '' | 'enabled' | 'disabled' | string
   fingerprintArgs: string[]
   proxyId: string
   proxyConfig: string
@@ -33,6 +34,7 @@ export interface BrowserProfileInput {
   profileName: string
   userDataDir: string
   coreId: string
+  restoreLastSession?: '' | 'enabled' | 'disabled' | string
   fingerprintArgs: string[]
   proxyId: string
   proxyConfig: string
@@ -419,3 +421,4 @@ export interface BrowserGroupInput {
 export interface BrowserGroupWithCount extends BrowserGroup {
   instanceCount: number
 }
+

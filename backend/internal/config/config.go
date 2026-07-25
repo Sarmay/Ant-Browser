@@ -166,6 +166,7 @@ type BrowserProfileConfig struct {
 	ProfileName        string   `yaml:"profile_name" json:"profileName"`
 	UserDataDir        string   `yaml:"user_data_dir" json:"userDataDir"`
 	CoreId             string   `yaml:"core_id" json:"coreId"`
+	RestoreLastSession string   `yaml:"restore_last_session,omitempty" json:"restoreLastSession,omitempty"`
 	FingerprintArgs    []string `yaml:"fingerprint_args" json:"fingerprintArgs"`
 	ProxyId            string   `yaml:"proxy_id" json:"proxyId"`
 	ProxyConfig        string   `yaml:"proxy_config" json:"proxyConfig"`

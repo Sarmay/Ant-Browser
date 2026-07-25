@@ -52,7 +52,8 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 				plan.releaseProxyBridge = false
 			}
 			if len(plan.deferredStartTargets) > 0 {
-				if err := openBrowserStartTargets(stableDebugPort, plan.deferredStartTargets); err != nil {
+				deferredPlan := deferredStartTargetsPlan{targets: plan.deferredStartTargets, newTabs: plan.deferredStartNewTabs}
+				if err := openDeferredStartTargets(stableDebugPort, deferredPlan); err != nil {
 					warning := deferredStartTargetsWarning(plan.deferredStartTargets, err)
 					profile.RuntimeWarning = warning
 					profile.LastError = ""
@@ -114,7 +115,7 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 		pendingStartNotice = browserDebugPendingStartNotice(plan.totalReadyTimeout)
 		a.markProfileRunningLocked(input.ProfileID, profile, cmd, cmd.Process.Pid, plan.assignedDebugPort, false, runtimeWarning)
 		if len(plan.deferredStartTargets) > 0 {
-			a.storeDeferredStartTargets(input.ProfileID, plan.deferredStartTargets)
+			a.storeDeferredStartTargets(input.ProfileID, plan.deferredStartTargets, plan.deferredStartNewTabs)
 		}
 		if plan.acquiredProxyBridge.valid() {
 			a.bindProfileProxyBridge(input.ProfileID, plan.acquiredProxyBridge)

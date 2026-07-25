@@ -87,6 +87,7 @@ func (m *Manager) copyProfile(profileId string, newName string, fingerprintResol
 		ProfileName:        profileName,
 		UserDataDir:        newId,
 		CoreId:             normalizeProfileCoreID(src.CoreId),
+		RestoreLastSession: NormalizeRestoreLastSessionMode(src.RestoreLastSession),
 		FingerprintArgs:    fingerprintResolver(src),
 		ProxyId:            src.ProxyId,
 		ProxyConfig:        src.ProxyConfig,

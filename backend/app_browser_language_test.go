@@ -60,6 +60,17 @@ func TestWriteBrowserLanguagePreferences(t *testing.T) {
 			t.Fatalf("intl[%s] = %#v, want %#v", key, intl[key], value)
 		}
 	}
+	webkit, ok := prefs["webkit"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("webkit missing: %#v", prefs)
+	}
+	webprefs, ok := webkit["webprefs"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("webkit.webprefs missing: %#v", webkit)
+	}
+	if got := webprefs["default_encoding"]; got != browserDefaultEncoding {
+		t.Fatalf("default_encoding = %#v, want %#v", got, browserDefaultEncoding)
+	}
 	if _, ok := prefs["profile"].(map[string]interface{}); !ok {
 		t.Fatalf("existing preferences were not preserved: %#v", prefs)
 	}

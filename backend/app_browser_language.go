@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	browserLangArg       = "--lang"
-	browserAcceptLangArg = "--accept-lang"
+	browserLangArg         = "--lang"
+	browserAcceptLangArg   = "--accept-lang"
+	browserDefaultEncoding = "UTF-8"
 )
 
 func normalizeBrowserLanguageArgs(args []string) []string {
@@ -69,6 +70,18 @@ func writeBrowserLanguagePreferences(userDataDir string, args []string) error {
 		intl["accept_languages"] = acceptLang
 	}
 	prefs["intl"] = intl
+
+	webkit, _ := prefs["webkit"].(map[string]interface{})
+	if webkit == nil {
+		webkit = map[string]interface{}{}
+	}
+	webprefs, _ := webkit["webprefs"].(map[string]interface{})
+	if webprefs == nil {
+		webprefs = map[string]interface{}{}
+	}
+	webprefs["default_encoding"] = browserDefaultEncoding
+	webkit["webprefs"] = webprefs
+	prefs["webkit"] = webkit
 
 	data, err := json.MarshalIndent(prefs, "", "  ")
 	if err != nil {

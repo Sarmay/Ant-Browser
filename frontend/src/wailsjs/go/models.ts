@@ -1367,6 +1367,7 @@ export namespace browser {
 	    profileName: string;
 	    userDataDir: string;
 	    coreId: string;
+	    restoreLastSession: string;
 	    fingerprintArgs: string[];
 	    proxyId: string;
 	    proxyConfig: string;
@@ -1402,6 +1403,7 @@ export namespace browser {
 	        this.profileName = source["profileName"];
 	        this.userDataDir = source["userDataDir"];
 	        this.coreId = source["coreId"];
+	        this.restoreLastSession = source["restoreLastSession"];
 	        this.fingerprintArgs = source["fingerprintArgs"];
 	        this.proxyId = source["proxyId"];
 	        this.proxyConfig = source["proxyConfig"];
@@ -1464,6 +1466,7 @@ export namespace browser {
 	    profileName: string;
 	    userDataDir: string;
 	    coreId: string;
+	    restoreLastSession: string;
 	    fingerprintArgs: string[];
 	    proxyId: string;
 	    proxyConfig: string;
@@ -1481,6 +1484,7 @@ export namespace browser {
 	        this.profileName = source["profileName"];
 	        this.userDataDir = source["userDataDir"];
 	        this.coreId = source["coreId"];
+	        this.restoreLastSession = source["restoreLastSession"];
 	        this.fingerprintArgs = source["fingerprintArgs"];
 	        this.proxyId = source["proxyId"];
 	        this.proxyConfig = source["proxyConfig"];

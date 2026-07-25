@@ -13,6 +13,7 @@ type Profile struct {
 	ProfileName        string   `json:"profileName"`
 	UserDataDir        string   `json:"userDataDir"`
 	CoreId             string   `json:"coreId"`
+	RestoreLastSession string   `json:"restoreLastSession"`
 	FingerprintArgs    []string `json:"fingerprintArgs"`
 	ProxyId            string   `json:"proxyId"`
 	ProxyConfig        string   `json:"proxyConfig"`
@@ -41,16 +42,17 @@ type Profile struct {
 
 // ProfileInput 创建/更新配置文件的输入
 type ProfileInput struct {
-	ProfileName     string   `json:"profileName"`
-	UserDataDir     string   `json:"userDataDir"`
-	CoreId          string   `json:"coreId"`
-	FingerprintArgs []string `json:"fingerprintArgs"`
-	ProxyId         string   `json:"proxyId"`
-	ProxyConfig     string   `json:"proxyConfig"`
-	LaunchArgs      []string `json:"launchArgs"`
-	Tags            []string `json:"tags"`
-	Keywords        []string `json:"keywords"`
-	GroupId         string   `json:"groupId"` // 所属分组ID
+	ProfileName        string   `json:"profileName"`
+	UserDataDir        string   `json:"userDataDir"`
+	CoreId             string   `json:"coreId"`
+	RestoreLastSession string   `json:"restoreLastSession"`
+	FingerprintArgs    []string `json:"fingerprintArgs"`
+	ProxyId            string   `json:"proxyId"`
+	ProxyConfig        string   `json:"proxyConfig"`
+	LaunchArgs         []string `json:"launchArgs"`
+	Tags               []string `json:"tags"`
+	Keywords           []string `json:"keywords"`
+	GroupId            string   `json:"groupId"` // 所属分组ID
 }
 
 // ProfileCopyOptions 复制实例时的附加选项。

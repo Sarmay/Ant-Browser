@@ -22,6 +22,7 @@ import {
 import { ProxyPoolHeader } from './proxyPool/ProxyPoolHeader'
 import { ProxyPoolTableCard } from './proxyPool/ProxyPoolTableCard'
 import { ProxyPoolCheckSettingsModal } from './proxyPool/ProxyPoolCheckSettingsModal'
+import { ProxyPoolUsageGuideModal } from './proxyPool/ProxyPoolUsageGuideModal'
 import { ProxyCoreDownloadModal } from './proxyPool/ProxyCoreDownloadModal'
 import { useProxySourceRefresh } from './proxyPool/useProxySourceRefresh'
 import { useProxyImportFlow } from './proxyPool/useProxyImportFlow'
@@ -37,6 +38,7 @@ export function ProxyPoolPage() {
   const [proxies, setProxies] = useState<BrowserProxy[]>([])
   const [displayList, setDisplayList] = useState<ProxyDisplayInfo[]>([])
   const [loading, setLoading] = useState(true)
+  const [usageGuideOpen, setUsageGuideOpen] = useState(false)
   const {
     coreDownloadOpen,
     coreDownloadType,
@@ -324,6 +326,7 @@ export function ProxyPoolPage() {
         hasURLImportSources={hasURLImportSources}
         onCheckAllIPHealth={() => void handleCheckAllIPHealth(filteredList)}
         onOpenSettings={() => void openCheckSettings()}
+        onOpenUsageGuide={() => setUsageGuideOpen(true)}
         onOpenImport={() => setImportModalOpen(true)}
         onOpenCoreDownload={openCoreDownload}
         onRefreshAllSources={() => void handleRefreshAllSources(false)}
@@ -386,6 +389,11 @@ export function ProxyPoolPage() {
         sortOrder={sortOrder}
         warmingAllBridges={warmingAllBridges}
         warmingBridgeIds={warmingBridgeIds}
+      />
+
+      <ProxyPoolUsageGuideModal
+        open={usageGuideOpen}
+        onClose={() => setUsageGuideOpen(false)}
       />
 
       <ProxyPoolImportModal

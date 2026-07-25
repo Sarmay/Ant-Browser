@@ -12,6 +12,11 @@ import { ProxyPickerModal } from '../components/ProxyPickerModal'
 
 const fallbackLowLaunchArgs = ['--disable-sync', '--no-first-run']
 const directProxyID = '__direct__'
+const RESTORE_LAST_SESSION_OPTIONS = [
+  { value: '', label: '跟随内核默认' },
+  { value: 'enabled', label: '开启：恢复历史标签' },
+  { value: 'disabled', label: '关闭：不恢复历史标签' },
+]
 type ProxySourceMode = 'pool' | 'local'
 type BrowserProfileEditForm = BrowserProfileInput & { lastLaunchArgs?: string[] }
 
@@ -237,6 +242,7 @@ export function BrowserEditPage() {
     profileName: '',
     userDataDir: '',
     coreId: '',
+    restoreLastSession: '',
     fingerprintArgs: [],
     proxyId: directProxyID,
     proxyConfig: '',
@@ -290,6 +296,7 @@ export function BrowserEditPage() {
           ...prev,
           proxyId: resolved.proxyId || directProxyID,
           proxyConfig: '',
+          restoreLastSession: '',
           fingerprintArgs: withAdaptiveDefaultWindowSize(settings.defaultFingerprintArgs || []),
         }))
         setLaunchArgsText(resolvedDefaultLaunchArgs.join('\n'))
@@ -308,6 +315,7 @@ export function BrowserEditPage() {
         profileName: current.profileName,
         userDataDir: current.userDataDir,
         coreId: normalizedCoreId,
+        restoreLastSession: current.restoreLastSession || '',
         fingerprintArgs: current.fingerprintArgs,
         proxyId: resolvedProxy.proxyId,
         proxyConfig: resolvedProxy.proxyConfig,
@@ -377,6 +385,7 @@ export function BrowserEditPage() {
       profileName: formData.profileName,
       userDataDir: formData.userDataDir,
       coreId: formData.coreId,
+      restoreLastSession: formData.restoreLastSession || '',
       fingerprintArgs: formData.fingerprintArgs,
       tags: formData.tags,
       keywords: formData.keywords,
@@ -566,6 +575,13 @@ export function BrowserEditPage() {
                   { value: '', label: '暂无内核，请添加内核' }
                 ]
               }
+            />
+          </FormItem>
+          <FormItem label="历史标签">
+            <Select
+              value={formData.restoreLastSession || ''}
+              onChange={e => handleChange('restoreLastSession', e.target.value)}
+              options={RESTORE_LAST_SESSION_OPTIONS}
             />
           </FormItem>
           <FormItem label="标签">
