@@ -316,7 +316,7 @@ function BrowserProfileCard({
 }) {
   return (
     <div
-      className={`flex flex-col border rounded-xl bg-[var(--color-bg-surface)] p-3 shadow-[0_1px_4px_rgba(0,0,0,0.08)] transition-all duration-200 h-[320px] overflow-hidden
+      className={`relative flex flex-col border rounded-xl bg-[var(--color-bg-surface)] p-3 shadow-[0_1px_4px_rgba(0,0,0,0.08)] transition-all duration-200 h-[320px] overflow-visible
         ${isSelected ? 'border-[var(--color-accent)] ring-1 ring-[var(--color-accent)]/20' : 'border-[var(--color-border-default)] hover:border-[var(--color-accent)]'}
       `}
     >
@@ -455,22 +455,13 @@ export function BrowserProfilesPanel({
         />
       ),
       width: 40,
-      render: (_, record, index) => (
-        <div className="relative inline-flex h-4 w-4 items-center">
-          <span
-            className="pointer-events-none absolute -right-2.5 -top-2.5 h-0 w-0 border-l-[16px] border-t-[16px] border-l-transparent"
-            style={{ borderTopColor: 'var(--color-accent)' }}
-          />
-          <span className="pointer-events-none absolute -right-2.5 -top-2.5 flex h-3.5 w-3.5 items-start justify-end pr-px pt-px text-[8px] font-semibold leading-none text-white">
-            {index + 1}
-          </span>
-          <input
-            type="checkbox"
-            className="w-4 h-4 rounded cursor-pointer accent-[var(--color-accent)]"
-            checked={selectedIds.has(record.profileId)}
-            onChange={() => onToggleSelect(record.profileId)}
-          />
-        </div>
+      render: (_, record) => (
+        <input
+          type="checkbox"
+          className="w-4 h-4 rounded cursor-pointer accent-[var(--color-accent)]"
+          checked={selectedIds.has(record.profileId)}
+          onChange={() => onToggleSelect(record.profileId)}
+        />
       ),
     },
     {
@@ -478,13 +469,14 @@ export function BrowserProfilesPanel({
       title: '实例名称',
       width: 320,
       render: (value, record) => (
-        <div className="flex min-w-[260px] flex-col gap-1">
-          <Link className="block truncate whitespace-nowrap text-[var(--color-accent)] text-sm font-medium hover:underline" to={`/browser/detail/${record.profileId}`} title={String(value || '')}>
+        <div className="flex min-w-[260px] items-center gap-2 whitespace-nowrap">
+          <Link className="block min-w-0 truncate text-[var(--color-accent)] text-sm font-medium hover:underline" to={`/browser/detail/${record.profileId}`} title={String(value || '')}>
             {value}
           </Link>
           {record.tags && record.tags.length > 0 && (
-            <div className="flex gap-1 flex-wrap">
-              {record.tags.map(tag => <Badge variant="default" key={tag}>{tag}</Badge>)}
+            <div className="flex shrink-0 gap-1 overflow-hidden">
+              {record.tags.slice(0, 2).map(tag => <Badge variant="default" key={tag}>{tag}</Badge>)}
+              {record.tags.length > 2 && <Badge variant="default">+{record.tags.length - 2}</Badge>}
             </div>
           )}
         </div>

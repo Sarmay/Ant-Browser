@@ -66,11 +66,10 @@ export function CoreSettingsModal({ open, form, saving, setForm, onClose, onSave
             />
           </div>
         </FormItem>
-        <FormItem label="默认恢复历史标签" hint="实例选择跟随内核时使用；不影响启动页和启动书签">
+        <FormItem label="默认恢复历史标签" hint="实例选择跟随内核时使用；不影响启动页和启动书签。实例未覆盖时，下次启动恢复之前的标签页和窗口。">
           <div className="flex items-center justify-between rounded-lg border border-[var(--color-border-default)] px-3 py-2">
             <div>
               <p className="text-sm text-[var(--color-text-primary)]">内核默认</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">实例未覆盖时，下次启动恢复之前的标签页和窗口。</p>
             </div>
             <Switch
               checked={form.restoreLastSession}

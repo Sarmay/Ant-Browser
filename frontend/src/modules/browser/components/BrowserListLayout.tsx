@@ -244,7 +244,7 @@ export function BrowserListSettingsModal({
             placeholder="data"
           />
         </FormItem>
-        <FormItem label="默认指纹参数（每行一个）">
+        <FormItem label="默认指纹参数" hint="每行一个参数">
           <Textarea
             value={fingerprintText}
             onChange={(event) => onFingerprintTextChange(event.target.value)}
@@ -252,7 +252,7 @@ export function BrowserListSettingsModal({
             placeholder="--fingerprint-brand=Chrome"
           />
         </FormItem>
-        <FormItem label="默认启动参数（每行一个）">
+        <FormItem label="默认启动参数" hint="每行一个参数">
           <Textarea
             value={launchText}
             onChange={(event) => onLaunchTextChange(event.target.value)}
@@ -260,7 +260,7 @@ export function BrowserListSettingsModal({
             placeholder="--disable-sync"
           />
         </FormItem>
-        <FormItem label="默认启动页面（每行一个 URL）" hint="留空则启动时不再自动打开页面">
+        <FormItem label="默认启动页面" hint="每行一个 URL，留空则启动时不再自动打开页面">
           <Textarea
             value={startUrlsText}
             onChange={(event) => onStartUrlsTextChange(event.target.value)}
@@ -277,11 +277,10 @@ export function BrowserListSettingsModal({
             />
           </div>
         </FormItem>
-        <FormItem label="默认恢复历史标签" hint="实例选择跟随内核时使用；不影响启动页和启动书签">
+        <FormItem label="默认恢复历史标签" hint="实例选择跟随内核时使用；不影响启动页和启动书签。实例未覆盖时，下次启动恢复之前的标签页和窗口。">
           <div className="flex items-center justify-between rounded-lg border border-[var(--color-border-default)] px-3 py-2">
             <div>
               <p className="text-sm text-[var(--color-text-primary)]">内核默认</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">实例未覆盖时，下次启动恢复之前的标签页和窗口。</p>
             </div>
             <Switch
               checked={settings.restoreLastSession}
