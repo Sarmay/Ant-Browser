@@ -1375,6 +1375,7 @@ export namespace browser {
 	    proxyBindSourceUrl: string;
 	    proxyBindName: string;
 	    proxyBindUpdatedAt: string;
+	    memoryLimitMb: number;
 	    launchArgs: string[];
 	    lastLaunchArgs: string[];
 	    tags: string[];
@@ -1411,6 +1412,7 @@ export namespace browser {
 	        this.proxyBindSourceUrl = source["proxyBindSourceUrl"];
 	        this.proxyBindName = source["proxyBindName"];
 	        this.proxyBindUpdatedAt = source["proxyBindUpdatedAt"];
+	        this.memoryLimitMb = source["memoryLimitMb"];
 	        this.launchArgs = source["launchArgs"];
 	        this.lastLaunchArgs = source["lastLaunchArgs"];
 	        this.tags = source["tags"];
@@ -1470,6 +1472,7 @@ export namespace browser {
 	    fingerprintArgs: string[];
 	    proxyId: string;
 	    proxyConfig: string;
+	    memoryLimitMb: number;
 	    launchArgs: string[];
 	    tags: string[];
 	    keywords: string[];
@@ -1488,6 +1491,7 @@ export namespace browser {
 	        this.fingerprintArgs = source["fingerprintArgs"];
 	        this.proxyId = source["proxyId"];
 	        this.proxyConfig = source["proxyConfig"];
+	        this.memoryLimitMb = source["memoryLimitMb"];
 	        this.launchArgs = source["launchArgs"];
 	        this.tags = source["tags"];
 	        this.keywords = source["keywords"];

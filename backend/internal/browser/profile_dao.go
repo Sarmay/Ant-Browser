@@ -37,6 +37,7 @@ func (d *SQLiteProfileDAO) List() ([]*Profile, error) {
 		       fingerprint_args, proxy_id, proxy_config,
 		       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
+		       COALESCE(memory_limit_mb, 0),
 		       launch_args,
 		       tags, keywords, group_id, created_at, updated_at,
 		       COALESCE(restore_last_session, ''), COALESCE(deleted_at, '')
@@ -64,6 +65,7 @@ func (d *SQLiteProfileDAO) ListDeleted() ([]*Profile, error) {
 		       fingerprint_args, proxy_id, proxy_config,
 		       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
+		       COALESCE(memory_limit_mb, 0),
 		       launch_args,
 		       tags, keywords, group_id, created_at, updated_at,
 		       COALESCE(restore_last_session, ''), COALESCE(deleted_at, '')
@@ -91,6 +93,7 @@ func (d *SQLiteProfileDAO) GetById(profileId string) (*Profile, error) {
 		       fingerprint_args, proxy_id, proxy_config,
 		       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
+		       COALESCE(memory_limit_mb, 0),
 		       launch_args,
 		       tags, keywords, group_id, created_at, updated_at,
 		       COALESCE(restore_last_session, ''), COALESCE(deleted_at, '')
@@ -121,8 +124,8 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 		INSERT INTO browser_profiles
 		  (profile_id, profile_name, user_data_dir, core_id, fingerprint_args,
 		   proxy_id, proxy_config, proxy_bind_source_id, proxy_bind_source_url, proxy_bind_name, proxy_bind_updated_at,
-		   launch_args, tags, keywords, group_id, created_at, updated_at, restore_last_session, deleted_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   memory_limit_mb, launch_args, tags, keywords, group_id, created_at, updated_at, restore_last_session, deleted_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(profile_id) DO UPDATE SET
 		  profile_name     = excluded.profile_name,
 		  user_data_dir    = excluded.user_data_dir,
@@ -134,6 +137,7 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 		  proxy_bind_source_url = excluded.proxy_bind_source_url,
 		  proxy_bind_name = excluded.proxy_bind_name,
 		  proxy_bind_updated_at = excluded.proxy_bind_updated_at,
+		  memory_limit_mb  = excluded.memory_limit_mb,
 		  launch_args      = excluded.launch_args,
 		  tags             = excluded.tags,
 		  keywords         = excluded.keywords,
@@ -144,7 +148,7 @@ func (d *SQLiteProfileDAO) Upsert(profile *Profile) error {
 		profile.ProfileId, profile.ProfileName, profile.UserDataDir, profile.CoreId,
 		string(fingerprintArgs), profile.ProxyId, profile.ProxyConfig,
 		profile.ProxyBindSourceID, profile.ProxyBindSourceURL, profile.ProxyBindName, profile.ProxyBindUpdatedAt,
-		string(launchArgs), string(tags), string(keywords), profile.GroupId,
+		normalizeMemoryLimitMB(profile.MemoryLimitMB), string(launchArgs), string(tags), string(keywords), profile.GroupId,
 		profile.CreatedAt, profile.UpdatedAt, NormalizeRestoreLastSessionMode(profile.RestoreLastSession), profile.DeletedAt,
 	)
 	if err != nil {
@@ -185,6 +189,7 @@ func (d *SQLiteProfileDAO) ListExpiredDeleted(expiredBefore string) ([]*Profile,
 		       fingerprint_args, proxy_id, proxy_config,
 		       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 		       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
+		       COALESCE(memory_limit_mb, 0),
 		       launch_args,
 		       tags, keywords, group_id, created_at, updated_at,
 		       COALESCE(restore_last_session, ''), COALESCE(deleted_at, '')
@@ -243,6 +248,7 @@ func (d *SQLiteProfileDAO) ListByGroup(groupId string, includeChildren bool, chi
 			       fingerprint_args, proxy_id, proxy_config,
 			       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 			       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
+			       COALESCE(memory_limit_mb, 0),
 			       launch_args,
 			       tags, keywords, group_id, created_at, updated_at,
 			       COALESCE(restore_last_session, ''), COALESCE(deleted_at, '')
@@ -254,6 +260,7 @@ func (d *SQLiteProfileDAO) ListByGroup(groupId string, includeChildren bool, chi
 			       fingerprint_args, proxy_id, proxy_config,
 			       COALESCE(proxy_bind_source_id, ''), COALESCE(proxy_bind_source_url, ''),
 			       COALESCE(proxy_bind_name, ''), COALESCE(proxy_bind_updated_at, ''),
+			       COALESCE(memory_limit_mb, 0),
 			       launch_args,
 			       tags, keywords, group_id, created_at, updated_at,
 			       COALESCE(restore_last_session, ''), COALESCE(deleted_at, '')
@@ -312,7 +319,7 @@ func scanProfile(s scanner) (*Profile, error) {
 		&p.ProfileId, &p.ProfileName, &p.UserDataDir, &p.CoreId,
 		&fingerprintArgsJSON, &p.ProxyId, &p.ProxyConfig,
 		&p.ProxyBindSourceID, &p.ProxyBindSourceURL, &p.ProxyBindName, &p.ProxyBindUpdatedAt,
-		&launchArgsJSON, &tagsJSON, &keywordsJSON, &p.GroupId,
+		&p.MemoryLimitMB, &launchArgsJSON, &tagsJSON, &keywordsJSON, &p.GroupId,
 		&p.CreatedAt, &p.UpdatedAt, &p.RestoreLastSession, &p.DeletedAt,
 	)
 	if err != nil {
@@ -335,5 +342,6 @@ func scanProfile(s scanner) (*Profile, error) {
 		p.Keywords = []string{}
 	}
 	p.RestoreLastSession = NormalizeRestoreLastSessionMode(p.RestoreLastSession)
+	p.MemoryLimitMB = normalizeMemoryLimitMB(p.MemoryLimitMB)
 	return &p, nil
 }

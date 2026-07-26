@@ -211,6 +211,13 @@ var migrations = []migration{
 			`ALTER TABLE browser_profiles ADD COLUMN restore_last_session TEXT NOT NULL DEFAULT ''`,
 		},
 	},
+	{
+		version: 14,
+		desc:    "实例表添加内存限制字段",
+		stmts: []string{
+			`ALTER TABLE browser_profiles ADD COLUMN memory_limit_mb INTEGER NOT NULL DEFAULT 0`,
+		},
+	},
 	// ── 新版本在此追加，格式：
 	// {
 	//     version: 4,
