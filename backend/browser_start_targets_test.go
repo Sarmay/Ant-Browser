@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"slices"
 	"testing"
 
 	"ant-chrome/backend/internal/browser"
@@ -17,6 +18,21 @@ func TestBuildBrowserLaunchTargetsRestoresSessionThenDefersStartPages(t *testing
 	}
 	if !deferredNewTabs {
 		t.Fatal("deferredNewTabs = false, want true so startup pages do not replace restored tabs")
+	}
+}
+
+func TestBuildBrowserLaunchArgsAddsRestoreLastSessionWhenEnabled(t *testing.T) {
+	args := buildBrowserLaunchArgs("profile-dir", 9222, "direct://", nil, nil, nil, nil, nil, true)
+	if !slices.Contains(args, "--restore-last-session") {
+		t.Fatalf("args = %#v, want --restore-last-session", args)
+	}
+}
+
+func TestBuildBrowserLaunchArgsOmitsRestoreLastSessionWhenDisabled(t *testing.T) {
+	sanitizedProfileArgs, _ := sanitizeManagedLaunchArgs([]string{"--restore-last-session"})
+	args := buildBrowserLaunchArgs("profile-dir", 9222, "direct://", nil, nil, sanitizedProfileArgs, nil, nil, false)
+	if slices.Contains(args, "--restore-last-session") {
+		t.Fatalf("args = %#v, want --restore-last-session omitted when disabled", args)
 	}
 }
 

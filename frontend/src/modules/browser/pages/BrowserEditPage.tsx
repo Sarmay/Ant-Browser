@@ -246,6 +246,7 @@ export function BrowserEditPage() {
     fingerprintArgs: [],
     proxyId: directProxyID,
     proxyConfig: '',
+    memoryLimitMb: 0,
     launchArgs: [],
     lastLaunchArgs: [],
     tags: [],
@@ -319,6 +320,7 @@ export function BrowserEditPage() {
         fingerprintArgs: current.fingerprintArgs,
         proxyId: resolvedProxy.proxyId,
         proxyConfig: resolvedProxy.proxyConfig,
+        memoryLimitMb: current.memoryLimitMb || 0,
         launchArgs: currentLaunchArgs,
         lastLaunchArgs: current.lastLaunchArgs || [],
         tags: current.tags,
@@ -346,7 +348,7 @@ export function BrowserEditPage() {
     return () => { cancelled = true }
   }, [id, isCreate, formData.coreId, fingerprintArgsKey])
 
-  const handleChange = (field: keyof BrowserProfileInput, value: string | string[]) => {
+  const handleChange = (field: keyof BrowserProfileInput, value: string | string[] | number) => {
     setIsDirty(true)
     setFormData(prev => {
       if (field === 'proxyId') {
@@ -392,6 +394,7 @@ export function BrowserEditPage() {
       groupId: formData.groupId,
       proxyId: resolvedProxyId,
       proxyConfig: resolvedProxyConfig,
+      memoryLimitMb: Math.max(0, Math.floor(Number(formData.memoryLimitMb) || 0)),
       launchArgs: normalizeLaunchArgs(launchArgsText.split('\n')),
     }
     const fingerprintValidation = validateFingerprintArgs(payload.fingerprintArgs)
@@ -582,6 +585,16 @@ export function BrowserEditPage() {
               value={formData.restoreLastSession || ''}
               onChange={e => handleChange('restoreLastSession', e.target.value)}
               options={RESTORE_LAST_SESSION_OPTIONS}
+            />
+          </FormItem>
+          <FormItem label="最大内存 MB">
+            <Input
+              type="number"
+              min="0"
+              step="128"
+              value={String(formData.memoryLimitMb || 0)}
+              onChange={e => handleChange('memoryLimitMb', Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+              placeholder="0 表示不限制"
             />
           </FormItem>
           <FormItem label="标签">

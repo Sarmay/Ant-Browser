@@ -21,6 +21,7 @@ type Profile struct {
 	ProxyBindSourceURL string   `json:"proxyBindSourceUrl"`
 	ProxyBindName      string   `json:"proxyBindName"`
 	ProxyBindUpdatedAt string   `json:"proxyBindUpdatedAt"`
+	MemoryLimitMB      int      `json:"memoryLimitMb"`
 	LaunchArgs         []string `json:"launchArgs"`
 	LastLaunchArgs     []string `json:"lastLaunchArgs"`
 	Tags               []string `json:"tags"`
@@ -49,6 +50,7 @@ type ProfileInput struct {
 	FingerprintArgs    []string `json:"fingerprintArgs"`
 	ProxyId            string   `json:"proxyId"`
 	ProxyConfig        string   `json:"proxyConfig"`
+	MemoryLimitMB      int      `json:"memoryLimitMb"`
 	LaunchArgs         []string `json:"launchArgs"`
 	Tags               []string `json:"tags"`
 	Keywords           []string `json:"keywords"`

@@ -27,7 +27,7 @@ import {
   startBrowserInstance,
   stopBrowserInstance,
   updateBrowserProfile,
-  openUserDataRoot,
+  openUserDataDir,
   exportFullBrowserBackup,
   importFullBrowserBackup,
 } from '../api'
@@ -304,9 +304,13 @@ export function BrowserListPage() {
     }
   }
 
-  const handleOpenUserDataRoot = async () => {
+  const handleOpenUserDataDir = async (profile: BrowserProfile) => {
     try {
-      const opened = await openUserDataRoot()
+      if (!profile.userDataDir.trim()) {
+        toast.warning('该实例没有用户数据目录')
+        return
+      }
+      const opened = await openUserDataDir(profile.userDataDir)
       if (!opened) {
         toast.warning('当前环境不支持打开数据目录')
       }
@@ -491,6 +495,7 @@ export function BrowserListPage() {
         fingerprintArgs: profile.fingerprintArgs,
         proxyId: proxy.proxyId,
         proxyConfig: '',
+        memoryLimitMb: profile.memoryLimitMb || 0,
         launchArgs: profile.launchArgs,
         tags: profile.tags,
         keywords: profile.keywords || [],
@@ -586,7 +591,7 @@ export function BrowserListPage() {
         onRestart={(profileId) => { void handleRestart(profileId) }}
         onOpenKeywords={openKwModal}
         onOpenExtensions={openExtensionModal}
-        onOpenDataRoot={() => { void handleOpenUserDataRoot() }}
+        onOpenDataDir={(profile) => { void handleOpenUserDataDir(profile) }}
         onExport={(profile) => { void handleExportProfile(profile) }}
         onOpenCopy={openCopyModal}
         onOpenProxyPicker={setProxyPickerProfile}

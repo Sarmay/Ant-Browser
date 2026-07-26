@@ -39,7 +39,7 @@ interface BrowserProfilesPanelProps {
   onRestart: (profileId: string) => void
   onOpenKeywords: (profile: BrowserProfile) => void
   onOpenExtensions: (profile: BrowserProfile) => void
-  onOpenDataRoot: () => void
+  onOpenDataDir: (profile: BrowserProfile) => void
   onExport: (profile: BrowserProfile) => void
   onOpenCopy: (profile: BrowserProfile) => void
   onOpenProxyPicker: (profile: BrowserProfile) => void
@@ -153,7 +153,7 @@ function ProfileMoreActions({
   onRestart,
   onOpenKeywords,
   onOpenExtensions,
-  onOpenDataRoot,
+  onOpenDataDir,
   onExport,
 }: {
   open: boolean
@@ -163,7 +163,7 @@ function ProfileMoreActions({
   onRestart: () => void
   onOpenKeywords: () => void
   onOpenExtensions: () => void
-  onOpenDataRoot: () => void
+  onOpenDataDir: () => void
   onExport: () => void
 }) {
   const triggerRef = useRef<HTMLDivElement>(null)
@@ -255,7 +255,7 @@ function ProfileMoreActions({
           <button
             type="button"
             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-muted)] hover:text-[var(--color-text-primary)]"
-            onClick={() => runAndClose(onOpenDataRoot)}
+            onClick={() => runAndClose(onOpenDataDir)}
           >
             <FolderOpen className="w-3.5 h-3.5" />
             数据目录
@@ -422,7 +422,7 @@ export function BrowserProfilesPanel({
   onRestart,
   onOpenKeywords,
   onOpenExtensions,
-  onOpenDataRoot,
+  onOpenDataDir,
   onExport,
   onOpenCopy,
   onOpenProxyPicker,
@@ -455,13 +455,18 @@ export function BrowserProfilesPanel({
         />
       ),
       width: 40,
-      render: (_, record) => (
-        <input
-          type="checkbox"
-          className="w-4 h-4 rounded cursor-pointer accent-[var(--color-accent)]"
-          checked={selectedIds.has(record.profileId)}
-          onChange={() => onToggleSelect(record.profileId)}
-        />
+      render: (_, record, index) => (
+        <div className="relative inline-flex items-center">
+          <span className="pointer-events-none absolute -left-3.5 -top-3 flex h-4 min-w-4 items-center justify-center rounded-br-md bg-[var(--color-accent)]/10 px-1 text-[10px] font-semibold leading-none text-[var(--color-accent)]">
+            {index + 1}
+          </span>
+          <input
+            type="checkbox"
+            className="w-4 h-4 rounded cursor-pointer accent-[var(--color-accent)]"
+            checked={selectedIds.has(record.profileId)}
+            onChange={() => onToggleSelect(record.profileId)}
+          />
+        </div>
       ),
     },
     {
@@ -552,7 +557,7 @@ export function BrowserProfilesPanel({
               onRestart={() => onRestart(record.profileId)}
               onOpenKeywords={() => onOpenKeywords(record)}
               onOpenExtensions={() => onOpenExtensions(record)}
-              onOpenDataRoot={onOpenDataRoot}
+              onOpenDataDir={() => onOpenDataDir(record)}
               onExport={() => onExport(record)}
             />
             <Button size="sm" variant="ghost" onClick={() => onDelete(record.profileId)} title="删除" disabled={isBusy}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>

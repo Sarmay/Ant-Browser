@@ -40,6 +40,25 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 		profile.LastError = startErr.Error()
 		return profile, startErr
 	}
+	memoryLimitCleanup, err := applyBrowserProcessMemoryLimit(cmd, profile.MemoryLimitMB)
+	if err != nil {
+		_ = a.stopProcessCmd(cmd)
+		startErr := fmt.Errorf("实例启动失败：无法应用实例内存限制 %d MB。原因：%v。", profile.MemoryLimitMB, err)
+		log.Error("浏览器进程内存限制应用失败",
+			logger.F("profile_id", input.ProfileID),
+			logger.F("chrome", plan.chromeBinaryPath),
+			logger.F("memory_limit_mb", profile.MemoryLimitMB),
+			logger.F("error", err.Error()),
+			logger.F("reason", startErr.Error()),
+		)
+		profile.LastError = startErr.Error()
+		return profile, startErr
+	}
+	defer func() {
+		if memoryLimitCleanup != nil {
+			memoryLimitCleanup()
+		}
+	}()
 	monitor.Start()
 
 	var lastStartErr error
@@ -72,13 +91,23 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 				logger.F("debug_port", stableDebugPort),
 				logger.F("pid", profile.Pid),
 				logger.F("proxy", plan.effectiveProxy),
+				logger.F("memory_limit_mb", profile.MemoryLimitMB),
 				logger.F("attempt", attempt),
 				logger.F("max_attempts", plan.maxStartAttempts),
 				logger.F("args", strings.Join(plan.args, " ")),
 			)
 			a.emitBrowserInstanceStarted(profile, false)
 
-			go a.waitBrowserProcess(input.ProfileID, monitor)
+			cleanup := memoryLimitCleanup
+			memoryLimitCleanup = nil
+			go func() {
+				defer func() {
+					if cleanup != nil {
+						cleanup()
+					}
+				}()
+				a.waitBrowserProcess(input.ProfileID, monitor)
+			}()
 			return profile, nil
 		}
 
@@ -130,7 +159,16 @@ func (a *App) startBrowserProfileWithPlan(input browserStartInput, plan *browser
 			logger.F("warning", runtimeWarning),
 		)
 		a.emitBrowserInstanceStarted(profile, false)
-		go a.waitBrowserProcess(input.ProfileID, monitor)
+		cleanup := memoryLimitCleanup
+		memoryLimitCleanup = nil
+		go func() {
+			defer func() {
+				if cleanup != nil {
+					cleanup()
+				}
+			}()
+			a.waitBrowserProcess(input.ProfileID, monitor)
+		}()
 		go a.waitBrowserDebugReadyAsync(input.ProfileID, plan.assignedDebugPort, browserAsyncDebugAttachTimeout)
 	}
 

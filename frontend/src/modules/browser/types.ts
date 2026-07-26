@@ -11,6 +11,7 @@
   proxyBindSourceUrl?: string
   proxyBindName?: string
   proxyBindUpdatedAt?: string
+  memoryLimitMb: number
   launchArgs: string[]
   lastLaunchArgs?: string[]
   tags: string[]
@@ -38,6 +39,7 @@ export interface BrowserProfileInput {
   fingerprintArgs: string[]
   proxyId: string
   proxyConfig: string
+  memoryLimitMb: number
   launchArgs: string[]
   tags: string[]
   keywords: string[]

@@ -45,6 +45,7 @@ func (m *Manager) Create(input ProfileInput) (*Profile, error) {
 		FingerprintArgs:    fingerprintArgs,
 		ProxyId:            resolvedProxy.ProxyId,
 		ProxyConfig:        resolvedProxy.ProxyConfig,
+		MemoryLimitMB:      normalizeMemoryLimitMB(input.MemoryLimitMB),
 		LaunchArgs:         input.LaunchArgs,
 		Tags:               input.Tags,
 		Keywords:           append([]string{}, input.Keywords...),

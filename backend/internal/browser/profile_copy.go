@@ -95,6 +95,7 @@ func (m *Manager) copyProfile(profileId string, newName string, fingerprintResol
 		ProxyBindSourceURL: src.ProxyBindSourceURL,
 		ProxyBindName:      src.ProxyBindName,
 		ProxyBindUpdatedAt: src.ProxyBindUpdatedAt,
+		MemoryLimitMB:      normalizeMemoryLimitMB(src.MemoryLimitMB),
 		LaunchArgs:         append([]string{}, src.LaunchArgs...),
 		Tags:               append([]string{}, src.Tags...),
 		Keywords:           append([]string{}, src.Keywords...),

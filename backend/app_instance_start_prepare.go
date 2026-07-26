@@ -168,7 +168,7 @@ func (a *App) prepareBrowserStartPlan(input browserStartInput, profile *BrowserP
 		chromeBinaryPath:     chromeBinaryPath,
 		userDataDir:          userDataDir,
 		extensionDirs:        extensionDirs,
-		args:                 buildBrowserLaunchArgs(userDataDir, assignedDebugPort, effectiveProxy, extensionDirs, fingerprintLaunchArgs, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, launchTargets),
+		args:                 buildBrowserLaunchArgs(userDataDir, assignedDebugPort, effectiveProxy, extensionDirs, fingerprintLaunchArgs, sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, launchTargets, restoreLastSession),
 		deferredStartTargets: deferredStartTargets,
 		deferredStartNewTabs: deferredStartNewTabs,
 		effectiveProxy:       effectiveProxy,
@@ -300,11 +300,14 @@ func (a *App) prepareBrowserLaunchContext(input browserStartInput, profile *Brow
 	return sanitizedProfileLaunchArgs, sanitizedExtraLaunchArgs, fingerprintLaunchArgs, chromeBinaryPath, userDataDir, nil
 }
 
-func buildBrowserLaunchArgs(userDataDir string, debugPort int, effectiveProxy string, extensionDirs []string, fingerprintLaunchArgs []string, sanitizedProfileLaunchArgs []string, sanitizedExtraLaunchArgs []string, launchTargets []string) []string {
+func buildBrowserLaunchArgs(userDataDir string, debugPort int, effectiveProxy string, extensionDirs []string, fingerprintLaunchArgs []string, sanitizedProfileLaunchArgs []string, sanitizedExtraLaunchArgs []string, launchTargets []string, restoreLastSession bool) []string {
 	args := []string{
 		fmt.Sprintf("--user-data-dir=%s", userDataDir),
 		fmt.Sprintf("--remote-debugging-port=%d", debugPort),
 		"--disable-session-crashed-bubble",
+	}
+	if restoreLastSession {
+		args = append(args, "--restore-last-session")
 	}
 
 	if effectiveProxy == "direct://" {
