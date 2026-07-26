@@ -456,8 +456,12 @@ export function BrowserProfilesPanel({
       ),
       width: 40,
       render: (_, record, index) => (
-        <div className="relative inline-flex items-center">
-          <span className="pointer-events-none absolute -left-3.5 -top-3 flex h-4 min-w-4 items-center justify-center rounded-br-md bg-[var(--color-accent)]/10 px-1 text-[10px] font-semibold leading-none text-[var(--color-accent)]">
+        <div className="relative inline-flex h-4 w-4 items-center">
+          <span
+            className="pointer-events-none absolute -right-2.5 -top-2.5 h-0 w-0 border-l-[16px] border-t-[16px] border-l-transparent"
+            style={{ borderTopColor: 'var(--color-accent)' }}
+          />
+          <span className="pointer-events-none absolute -right-2.5 -top-2.5 flex h-3.5 w-3.5 items-start justify-end pr-px pt-px text-[8px] font-semibold leading-none text-white">
             {index + 1}
           </span>
           <input
