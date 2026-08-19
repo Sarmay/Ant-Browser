@@ -141,7 +141,8 @@ function CloseConfirmModal() {
   useEffect(() => {
     let cancelled = false;
 
-    Environment()
+    Promise.resolve()
+      .then(() => Environment())
       .then((info) => {
         if (!cancelled && info?.platform) {
           setPlatform(info.platform);

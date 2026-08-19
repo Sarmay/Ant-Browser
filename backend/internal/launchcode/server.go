@@ -3,6 +3,7 @@ package launchcode
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"strconv"
@@ -118,6 +119,7 @@ type LaunchServer struct {
 	activeID   string
 	activeName string
 	apiAuth    APIAuthConfig
+	docsFS     fs.FS
 }
 
 // NewLaunchServer 创建 LaunchServer
@@ -130,6 +132,19 @@ func NewLaunchServer(service *LaunchCodeService, starter BrowserStarter, mgr *br
 	}
 	srv.SetAPIAuthConfig(APIAuthConfig{})
 	return srv
+}
+
+// SetDocsFS configures the read-only frontend build served at /docs/.
+func (s *LaunchServer) SetDocsFS(docsFS fs.FS) {
+	s.mu.Lock()
+	s.docsFS = docsFS
+	s.mu.Unlock()
+}
+
+func (s *LaunchServer) docsFileSystem() fs.FS {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.docsFS
 }
 
 // Start 非阻塞启动 HTTP 服务。

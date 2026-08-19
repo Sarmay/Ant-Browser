@@ -12,6 +12,7 @@ import { CoreSettingsModal } from './coreManagement/CoreSettingsModal'
 import { fetchCoreDownloadRecommendation } from './coreManagement/coreDownloadRecommendation'
 import type { CoreDownloadRecommendation } from './coreManagement/coreDownloadRecommendation'
 import type { CoreDisplayInfo, CoreDownloadForm, CoreDownloadProgress, CoreEditForm, CoreSettingsForm } from './coreManagement.types'
+import { resolveActionErrorMessage } from '../utils/actionErrors'
 
 export function CoreManagementPage() {
   const [cores, setCores] = useState<BrowserCore[]>([])
@@ -252,7 +253,7 @@ export function CoreManagementPage() {
 
   const handleImportLocal = async () => {
     setImporting(true)
-    setImportProgress({ phase: 'selecting', progress: 0, message: '请选择本地内核包...' })
+    setImportProgress({ phase: 'selecting', progress: 0, message: '请选择本地内核...' })
     try {
       const imported = await importLocalBrowserCore()
       if (!imported) {
@@ -261,8 +262,8 @@ export function CoreManagementPage() {
       }
       await loadData()
       toast.success(`已导入：${imported.coreName}`)
-    } catch (error: any) {
-      toast.error(error?.message || '导入失败')
+    } catch (error: unknown) {
+      toast.error(resolveActionErrorMessage(error, '导入失败'))
     } finally {
       setImporting(false)
     }
@@ -373,16 +374,18 @@ export function CoreManagementPage() {
   }
 
   // 确认删除
-  const handleDeleteConfirm = async () => {
-    if (!deletingCore) return
+  const handleDeleteConfirm = async (): Promise<boolean> => {
+    if (!deletingCore) return false
     try {
       await deleteBrowserCore(deletingCore.coreId)
       await loadData()
       toast.success('内核已删除')
+      setDeletingCore(null)
+      return true
     } catch (error: any) {
       toast.error(error?.message || '删除失败')
+      return false
     }
-    setDeletingCore(null)
   }
 
   // 设为默认
@@ -484,7 +487,7 @@ export function CoreManagementPage() {
         </div>
         <div className="flex gap-2">
           <Button size="sm" variant="secondary" onClick={handleOpenDownload}>下载内核</Button>
-          <Button size="sm" variant="secondary" onClick={handleImportLocal} loading={importing}>导入本地</Button>
+          <Button size="sm" variant="secondary" onClick={handleImportLocal} loading={importing} title="选择归档、macOS 应用包或内核目录">导入本地</Button>
           <Button size="sm" variant="secondary" onClick={handleScan} loading={scanning}>扫描内核</Button>
           <Button size="sm" onClick={handleAdd}>新增内核</Button>
         </div>

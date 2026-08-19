@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Archive, CheckCircle, ChevronRight, ChevronUp, Edit2, LayoutGrid, List, Play, Plus, RefreshCw, Sliders, Star, Trash2, Upload, XCircle } from 'lucide-react'
 
-import { Button, Card, FormItem, Input, Modal, Switch, Table, Textarea } from '../../../shared/components'
+import { Button, Card, ConfirmModal, FormItem, Input, Modal, Switch, Table, Textarea } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
 
 import type { BrowserCore, BrowserCoreInput, BrowserGroupWithCount, BrowserProxy, BrowserSettings } from '../types'
@@ -156,7 +157,7 @@ interface BrowserListSettingsModalProps {
   onStartUrlsTextChange: (next: string) => void
   onAddCore: () => void
   onEditCore: (core: BrowserCore) => void
-  onDeleteCore: (coreId: string) => void
+  onDeleteCore: (coreId: string) => boolean | void | Promise<boolean | void>
   onSetDefaultCore: (coreId: string) => void
 }
 
@@ -179,6 +180,7 @@ export function BrowserListSettingsModal({
   onDeleteCore,
   onSetDefaultCore,
 }: BrowserListSettingsModalProps) {
+  const [deleteCandidate, setDeleteCandidate] = useState<BrowserCore | null>(null)
   const coreColumns: TableColumn<BrowserCore>[] = [
     { key: 'coreName', title: '名称' },
     { key: 'corePath', title: '路径' },
@@ -201,7 +203,13 @@ export function BrowserListSettingsModal({
           <Button size="sm" variant="ghost" onClick={() => onEditCore(record)} title="编辑">
             <Edit2 className="w-4 h-4" />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => onDeleteCore(record.coreId)} title="删除">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setDeleteCandidate(record)}
+            disabled={record.isDefault || cores.length <= 1}
+            title={record.isDefault ? '默认内核不能删除' : cores.length <= 1 ? '至少保留一个内核' : '删除'}
+          >
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>
@@ -210,7 +218,8 @@ export function BrowserListSettingsModal({
   ]
 
   return (
-    <Modal
+    <>
+      <Modal
       open={open}
       onClose={onClose}
       title="基础配置"
@@ -319,7 +328,17 @@ export function BrowserListSettingsModal({
           </FormItem>
         </div>
       </div>
-    </Modal>
+      </Modal>
+      <ConfirmModal
+        open={!!deleteCandidate}
+        onClose={() => setDeleteCandidate(null)}
+        onConfirm={() => deleteCandidate ? onDeleteCore(deleteCandidate.coreId) : false}
+        title="删除内核"
+        content={`确定删除内核「${deleteCandidate?.coreName || ''}」？正在被实例使用的内核无法删除。`}
+        confirmText="删除"
+        danger
+      />
+    </>
   )
 }
 

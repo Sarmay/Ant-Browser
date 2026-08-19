@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { Button } from './Button'
@@ -84,7 +84,7 @@ export function Modal({
 interface ConfirmModalProps {
   open: boolean
   onClose: () => void
-  onConfirm: () => void
+  onConfirm: () => boolean | void | Promise<boolean | void>
   title?: string
   content: ReactNode
   confirmText?: string
@@ -102,30 +102,66 @@ export function ConfirmModal({
   cancelText = '取消',
   danger = false,
 }: ConfirmModalProps) {
+  const [confirming, setConfirming] = useState(false)
+  const [confirmError, setConfirmError] = useState('')
+
+  useEffect(() => {
+    if (!open) {
+      setConfirming(false)
+      setConfirmError('')
+    }
+  }, [open])
+
+  const handleClose = () => {
+    if (confirming) return
+    setConfirmError('')
+    onClose()
+  }
+
+  const handleConfirm = async () => {
+    if (confirming) return
+    setConfirming(true)
+    setConfirmError('')
+    try {
+      const confirmed = await onConfirm()
+      if (confirmed !== false) {
+        onClose()
+      }
+    } catch (error: any) {
+      setConfirmError(error?.message || '操作失败，请重试')
+    } finally {
+      setConfirming(false)
+    }
+  }
+
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title={title}
       width="400px"
+      closable={!confirming}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={handleClose} disabled={confirming}>
             {cancelText}
           </Button>
           <Button
             variant={danger ? 'danger' : 'primary'}
-            onClick={() => {
-              onConfirm()
-              onClose()
-            }}
+            onClick={handleConfirm}
+            loading={confirming}
           >
             {confirmText}
           </Button>
         </>
       }
     >
-      <div className="text-[var(--color-text-secondary)]">{content}</div>
+      <div className="space-y-3">
+        <div className="text-[var(--color-text-secondary)]">{content}</div>
+        {confirmError && (
+          <div role="alert" className="text-sm text-[var(--color-error)]">{confirmError}</div>
+        )}
+      </div>
     </Modal>
   )
 }

@@ -121,10 +121,13 @@ function StructuredApiSectionPage({
   return (
     <div className="space-y-6">
       <section className="rounded-[28px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-6 shadow-[var(--shadow-md)]">
-        <div>
+        <div className="space-y-2">
           <h1 className="text-3xl font-semibold tracking-tight text-[var(--color-text-primary)]">
             {section.title}
           </h1>
+          <p className="max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">
+            {section.intro}
+          </p>
         </div>
       </section>
 
@@ -178,7 +181,7 @@ function StructuredApiDetailPage({
   authHeader,
   onOpenDoc,
 }: {
-  docId: Exclude<StructuredApiDocId, 'api-profiles-launch' | 'api-runtime' | 'api-automation'>
+  docId: Exclude<StructuredApiDocId, StructuredApiSectionId>
   launchBaseUrl: string
   authHeader: string
   onOpenDoc: (id: StructuredApiDocId) => void
@@ -203,6 +206,9 @@ function StructuredApiDetailPage({
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-text-primary)]">
             {endpoint.label}
           </h1>
+          <p className="max-w-3xl text-sm leading-6 text-[var(--color-text-secondary)]">
+            {endpoint.description}
+          </p>
         </div>
       </section>
 

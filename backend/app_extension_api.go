@@ -39,6 +39,8 @@ type BrowserExtensionManualDownloadFile struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
+var removeExtensionInstallDir = os.RemoveAll
+
 func (a *App) BrowserExtensionList() ([]BrowserExtension, error) {
 	if a.browserMgr == nil || a.browserMgr.ExtensionDAO == nil {
 		return []BrowserExtension{}, nil
@@ -299,13 +301,10 @@ func (a *App) BrowserExtensionDelete(extensionID string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := a.resolveBrowserExtensionInstallDir(extension.InstallDir); err != nil {
+	if err := a.removeBrowserExtensionInstallDir(extension.InstallDir); err != nil {
 		return err
 	}
 	if err := a.browserMgr.ExtensionDAO.Delete(extensionID); err != nil {
-		return err
-	}
-	if err := a.removeBrowserExtensionInstallDir(extension.InstallDir); err != nil {
 		return err
 	}
 	return nil
@@ -338,7 +337,7 @@ func (a *App) removeBrowserExtensionInstallDir(installDir string) error {
 	if err != nil || target == "" {
 		return err
 	}
-	if err := os.RemoveAll(target); err != nil {
+	if err := removeExtensionInstallDir(target); err != nil {
 		return fmt.Errorf("删除插件目录失败: %w", err)
 	}
 	return nil

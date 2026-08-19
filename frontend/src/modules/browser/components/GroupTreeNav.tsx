@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { ChevronRight, ChevronDown, Folder, FolderOpen, Plus, Pencil, Trash2, FolderInput } from 'lucide-react'
 import type { BrowserGroupWithCount, BrowserGroupInput } from '../types'
 import { createGroup, updateGroup, deleteGroup } from '../api'
+import { ConfirmModal, toast } from '../../../shared/components'
 
 interface GroupTreeNavProps {
   groups: BrowserGroupWithCount[]
@@ -54,6 +55,7 @@ export function GroupTreeNav({ groups, selectedGroupId, onSelectGroup, onRefresh
   const [newGroupName, setNewGroupName] = useState('')
   const [editingGroup, setEditingGroup] = useState<BrowserGroupWithCount | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; group: BrowserGroupWithCount } | null>(null)
+  const [deletingGroup, setDeletingGroup] = useState<BrowserGroupWithCount | null>(null)
 
   const tree = useMemo(() => buildTree(groups), [groups])
 
@@ -96,13 +98,20 @@ export function GroupTreeNav({ groups, selectedGroupId, onSelectGroup, onRefresh
     onRefresh()
   }
 
-  const handleDelete = async (groupId: string) => {
-    if (!confirm('确定删除此分组？子分组和实例将移动到父分组。')) return
-    await deleteGroup(groupId)
-    if (selectedGroupId === groupId) {
-      onSelectGroup(null)
+  const handleDelete = async (): Promise<boolean> => {
+    if (!deletingGroup) return false
+    try {
+      await deleteGroup(deletingGroup.groupId)
+      if (selectedGroupId === deletingGroup.groupId) {
+        onSelectGroup(null)
+      }
+      onRefresh()
+      toast.success('分组已删除')
+      return true
+    } catch (error: any) {
+      toast.error(error?.message || '删除分组失败')
+      return false
     }
-    onRefresh()
   }
 
   const handleContextMenu = (e: React.MouseEvent, group: BrowserGroupWithCount) => {
@@ -274,7 +283,7 @@ export function GroupTreeNav({ groups, selectedGroupId, onSelectGroup, onRefresh
           </button>
           <button
             className="w-full px-4 py-1.5 text-sm text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-red-500"
-            onClick={() => handleDelete(contextMenu.group.groupId)}
+            onClick={() => setDeletingGroup(contextMenu.group)}
           >
             <Trash2 className="w-4 h-4" /> 删除
           </button>
@@ -285,6 +294,16 @@ export function GroupTreeNav({ groups, selectedGroupId, onSelectGroup, onRefresh
       {contextMenu && (
         <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
       )}
+
+      <ConfirmModal
+        open={!!deletingGroup}
+        onClose={() => setDeletingGroup(null)}
+        onConfirm={handleDelete}
+        title="删除分组"
+        content={`确定删除分组「${deletingGroup?.groupName || ''}」？子分组和实例将移动到父分组。`}
+        confirmText="删除"
+        danger
+      />
     </div>
   )
 }

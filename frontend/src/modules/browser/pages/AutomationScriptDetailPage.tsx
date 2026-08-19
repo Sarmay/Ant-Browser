@@ -1,6 +1,7 @@
 import { ArrowLeft } from "lucide-react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Button, toast } from "../../../shared/components";
+import { Button, ConfirmModal, toast } from "../../../shared/components";
 import { deleteAutomationScript, exportAutomationScriptDirectory, exportAutomationScriptTemplate, exportAutomationScriptZip, refreshAutomationScript, saveAutomationScript } from "../automationScriptApi";
 import {
   AutomationScriptExportModal,
@@ -27,6 +28,7 @@ import { useAutomationScriptDetailState } from "./automationScriptDetail/useAuto
 export function AutomationScriptDetailPage() {
   const navigate = useNavigate();
   const { scriptId = "" } = useParams();
+  const [confirmAction, setConfirmAction] = useState<"leave" | "delete" | "refresh" | null>(null);
   const { launchBaseUrl, apiAuth } = useLaunchContext();
   const {
     draft,
@@ -58,7 +60,8 @@ export function AutomationScriptDetailPage() {
   } = useAutomationScriptDetailState(scriptId);
 
   const leavePage = () => {
-    if (dirty && !window.confirm("当前脚本有未保存修改，确认离开吗？")) {
+    if (dirty) {
+      setConfirmAction("leave");
       return;
     }
     navigate("/browser/automation");
@@ -168,22 +171,25 @@ export function AutomationScriptDetailPage() {
     if (draft) setRunModalOpen(true);
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!draft) {
       return;
     }
-    if (!window.confirm(`确认删除脚本「${draft.name || "未命名脚本"}」吗？`)) {
-      return;
-    }
+    setConfirmAction("delete");
+  };
 
+  const handleDeleteConfirm = async (): Promise<boolean> => {
+    if (!draft) return false;
     setBusyAction("delete");
     try {
       await deleteAutomationScript(draft.id);
       toast.success("脚本已删除");
       navigate("/browser/automation", { replace: true });
+      return true;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "脚本删除失败";
       toast.error(message);
+      return false;
     } finally {
       setBusyAction("none");
     }
@@ -201,10 +207,11 @@ export function AutomationScriptDetailPage() {
       toast.warning("请先保存当前修改，再重新导入");
       return;
     }
-    if (!window.confirm("确认按来源重新导入当前脚本吗？这会覆盖当前脚本内容。")) {
-      return;
-    }
+    setConfirmAction("refresh");
+  };
 
+  const handleRefreshConfirm = async (): Promise<boolean> => {
+    if (!draft) return false;
     setBusyAction("refresh");
     try {
       const refreshed = await refreshAutomationScript(draft.id);
@@ -213,10 +220,12 @@ export function AutomationScriptDetailPage() {
       toast.success(
         draft.source.type === "git" ? "脚本已重新拉取" : "脚本已重新导入",
       );
+      return true;
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "脚本重新导入失败";
       toast.error(message);
+      return false;
     } finally {
       setBusyAction("none");
     }
@@ -419,6 +428,33 @@ export function AutomationScriptDetailPage() {
         onClose={() => setPublicApiModalOpen(false)}
         onChange={updatePublicAPI}
         onBeforeInvoke={handlePreparePublicApiInvoke}
+      />
+      <ConfirmModal
+        open={confirmAction === "leave"}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => navigate("/browser/automation")}
+        title="放弃未保存修改"
+        content="当前脚本有未保存修改，离开后这些修改将丢失。"
+        confirmText="仍然离开"
+        danger
+      />
+      <ConfirmModal
+        open={confirmAction === "delete"}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleDeleteConfirm}
+        title="删除自动化脚本"
+        content={`确定删除脚本「${draft.name || "未命名脚本"}」？此操作不可恢复。`}
+        confirmText="删除"
+        danger
+      />
+      <ConfirmModal
+        open={confirmAction === "refresh"}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleRefreshConfirm}
+        title="重新导入脚本"
+        content="将按当前来源重新导入并覆盖脚本内容，是否继续？"
+        confirmText="重新导入"
+        danger
       />
       <AutomationScriptDetailModals
         paramsHelp={paramsHelp}

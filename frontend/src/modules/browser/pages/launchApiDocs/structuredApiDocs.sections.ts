@@ -2,6 +2,16 @@
 
 export const STRUCTURED_API_SECTION_DOCS: StructuredApiSectionDoc[] = [
   {
+    id: 'api-system',
+    title: '服务与诊断',
+    intro: '先确认 LaunchServer 在线，再用调用日志定位启动和运行态请求中的错误。',
+    highlights: [
+      '/api/health 用于存活检查。',
+      '/api/launch/logs 返回最近的启动与运行态调用记录。',
+      '所有 /api/* 接口在启用 API Key 后都必须携带当前认证请求头。',
+    ],
+  },
+  {
     id: 'api-profiles-launch',
     title: '实例与启动',
     intro: '这页只做实例管理和启动能力的总览。先通过实例接口完成配置，再按 launchCode 或 selector 启动实例。',
@@ -18,7 +28,7 @@ export const STRUCTURED_API_SECTION_DOCS: StructuredApiSectionDoc[] = [
     highlights: [
       'runtime/session 用于接管前准备。',
       'runtime/status / runtime/stop 都按 selector 工作。',
-      'CDP 详情只从表格进入。',
+      'CDP 响应由活动浏览器原样透传，WebSocket 接管时需保留 /devtools/... 路径。',
     ],
   },
   {
@@ -28,7 +38,7 @@ export const STRUCTURED_API_SECTION_DOCS: StructuredApiSectionDoc[] = [
     highlights: [
       '先查列表，再按需查详情。',
       '执行接口只接受 object 形态的 selector / params。',
-      '详情只从表格进入。',
+      '启用 Public API 的脚本可通过 /api/automation/hooks/{hookPath} 调用。',
     ],
   },
 ]

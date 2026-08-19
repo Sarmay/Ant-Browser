@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Save, RotateCcw } from 'lucide-react'
-import { Card, Button, ThemeSwitcher, toast } from '../../shared/components'
+import { Card, Button, ConfirmModal, ThemeSwitcher, toast } from '../../shared/components'
 import {
   fetchSettings,
   saveSettings,
@@ -49,6 +49,8 @@ export function SettingsPage() {
   const [actionLoading, setActionLoading] = useState<'none' | 'init' | 'export' | 'import-reset' | 'import-merge'>('none')
   const [exportProgress, setExportProgress] = useState<BackupExportProgress | null>(null)
   const [importProgress, setImportProgress] = useState<BackupExportProgress | null>(null)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+  const [initializeConfirmOpen, setInitializeConfirmOpen] = useState(false)
   const [exportLogs, setExportLogs] = useState<BackupExportLogItem[]>([])
   const exportLogsRef = useRef<HTMLDivElement | null>(null)
 
@@ -75,8 +77,8 @@ export function SettingsPage() {
     setAutomationRuntimeDirty(false)
   }, [automationState.settings.nodeSource, automationState.settings.systemNodePath])
 
-  const loadSettings = async () => {
-    setLoading(true)
+  const loadSettings = async (showPageLoading = true) => {
+    if (showPageLoading) setLoading(true)
     try {
       const [data, automation, launchServer] = await Promise.all([
         fetchSettings(),
@@ -89,7 +91,7 @@ export function SettingsPage() {
       setLaunchServerBaseUrl(launchServer.baseUrl)
       setLaunchServerReady(launchServer.ready)
     } finally {
-      setLoading(false)
+      if (showPageLoading) setLoading(false)
     }
   }
 
@@ -113,11 +115,16 @@ export function SettingsPage() {
     }
   }
 
-  const handleReset = async () => {
-    if (confirm('确定要重置所有设置吗？')) {
+  const handleReset = async (): Promise<boolean> => {
+    try {
       const data = await resetSettings()
       setSettings(data)
       setHasChanges(false)
+      toast.success('设置已恢复默认值')
+      return true
+    } catch (error: any) {
+      toast.error(error?.message || '重置设置失败')
+      return false
     }
   }
 
@@ -272,26 +279,33 @@ export function SettingsPage() {
     }
   }
 
-  const handleInitializeSystem = async () => {
-    if (!confirm('初始化会清空当前数据并恢复默认状态，是否继续？')) {
-      return
-    }
+  const handleInitializeSystem = async (): Promise<boolean> => {
+    if (actionLoading !== 'none') return false
     setActionLoading('init')
     try {
       const res = await initializeSystemData()
       if (res.cancelled) {
         toast.info('已取消初始化')
-        return
+        return true
       }
+      try {
+        await loadSettings(false)
+      } catch (error: any) {
+        toast.warning(error?.message || '初始化已完成，但刷新设置失败，请手动刷新页面')
+      }
+      setHasChanges(false)
       toast.success(res.message || '初始化完成')
+      return true
     } catch (error: any) {
       toast.error(error?.message || '初始化失败')
+      return false
     } finally {
       setActionLoading('none')
     }
   }
 
   const handleExportSystem = async () => {
+    if (actionLoading !== 'none') return
     setActionLoading('export')
     setExportLogs([])
     setExportProgress({ phase: 'starting', progress: 0, message: '准备导出...' })
@@ -326,6 +340,7 @@ export function SettingsPage() {
   }
 
   const handleImportSystem = async (resetFirst: boolean) => {
+    if (actionLoading !== 'none') return
     setActionLoading(resetFirst ? 'import-reset' : 'import-merge')
     setImportProgress({
       phase: 'starting',
@@ -376,6 +391,12 @@ export function SettingsPage() {
     }
   }
 
+  const handleOpenImport = () => {
+    if (actionLoading !== 'none') return
+    setImportProgress(null)
+    setImportModalOpen(true)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -393,7 +414,12 @@ export function SettingsPage() {
           <p className="text-sm text-[var(--color-text-muted)] mt-1">配置应用的各项参数</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={handleReset}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setResetConfirmOpen(true)}
+            disabled={saving || actionLoading !== 'none'}
+          >
             <RotateCcw className="w-4 h-4" />
             重置
           </Button>
@@ -453,12 +479,11 @@ export function SettingsPage() {
         exportProgress={exportProgress}
         exportLogs={exportLogs}
         exportLogsRef={exportLogsRef}
-        onInitialize={() => { void handleInitializeSystem() }}
-        onExport={() => { void handleExportSystem() }}
-        onOpenImport={() => {
-          setImportProgress(null)
-          setImportModalOpen(true)
+        onInitialize={() => {
+          if (actionLoading === 'none') setInitializeConfirmOpen(true)
         }}
+        onExport={() => { void handleExportSystem() }}
+        onOpenImport={handleOpenImport}
       />
 
       <BackupImportModal
@@ -470,6 +495,26 @@ export function SettingsPage() {
           setImportProgress(null)
         }}
         onImport={(resetFirst) => { void handleImportSystem(resetFirst) }}
+      />
+
+      <ConfirmModal
+        open={resetConfirmOpen}
+        onClose={() => setResetConfirmOpen(false)}
+        onConfirm={handleReset}
+        title="恢复默认设置"
+        content="确定将所有应用设置恢复为默认值？尚未保存的修改也会丢失。"
+        confirmText="恢复默认"
+        danger
+      />
+
+      <ConfirmModal
+        open={initializeConfirmOpen}
+        onClose={() => setInitializeConfirmOpen(false)}
+        onConfirm={handleInitializeSystem}
+        title="初始化系统"
+        content="初始化会清空当前实例、代理、插件及其他业务数据并恢复默认状态。此操作不可撤销，是否继续？"
+        confirmText="确认初始化"
+        danger
       />
 
     </div>

@@ -14,6 +14,7 @@ import {
   DOC_API_AUTOMATION,
   DOC_API_PROFILES_LAUNCH,
   DOC_API_RUNTIME,
+  DOC_API_SYSTEM,
 } from './contentApi'
 import { DOC_API_SUPPORT } from './contentReference'
 import { getStructuredApiHiddenDocItems } from './structuredApiDocs'
@@ -121,6 +122,12 @@ export const DOC_GROUPS: LaunchDocGroup[] = [
         label: '接口总览',
         summary: '认证、选择规则和全部对外接口索引。',
         content: DOC_API_OVERVIEW,
+      },
+      {
+        id: 'api-system',
+        label: '服务与诊断',
+        summary: '健康检查、调用日志和通用认证约束。',
+        content: DOC_API_SYSTEM,
       },
       {
         id: 'api-profiles-launch',

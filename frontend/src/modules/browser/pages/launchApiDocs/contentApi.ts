@@ -1,3 +1,17 @@
+export const DOC_API_SYSTEM = `# 服务与诊断
+
+## 接口
+
+| 方法 | 路径 | 用途 |
+|------|------|------|
+| \`GET\` | \`/api/health\` | 确认 LaunchServer 在线 |
+| \`GET\` | \`/api/launch/logs?limit=50\` | 查看最近启动与运行态调用记录 |
+
+健康检查只表示 HTTP 服务在线。判断当前是否有可接管的浏览器实例，请继续调用 \`GET /api/runtime/active\`。
+
+\`limit\` 默认为 50，整数会裁剪到 1–200。调用日志保存在内存中，服务重启后清空。
+`
+
 export const DOC_API_PROFILES_LAUNCH = `# 实例与启动
 
 ## 实例接口
@@ -64,7 +78,9 @@ curl -X POST http://127.0.0.1:19876/api/profiles \\
 \`\`\`bash
 curl http://127.0.0.1:19876/api/profiles
 curl http://127.0.0.1:19876/api/profiles/550e8400-e29b-41d4-a716-446655440000
-curl -X PUT http://127.0.0.1:19876/api/profiles/550e8400-e29b-41d4-a716-446655440000 -H "Content-Type: application/json" -d '{ ... }'
+curl -X PUT http://127.0.0.1:19876/api/profiles/550e8400-e29b-41d4-a716-446655440000 \\
+  -H "Content-Type: application/json" \\
+  -d '{"profile":{"profileName":"buyer-001","keywords":["buyer-001","priority"]}}'
 curl -X DELETE http://127.0.0.1:19876/api/profiles/550e8400-e29b-41d4-a716-446655440000
 \`\`\`
 
@@ -239,6 +255,7 @@ export const DOC_API_AUTOMATION = `# 脚本自动化
 | \`GET\` | \`/api/automation/scripts/{scriptId}\` | 查单个脚本详情 |
 | \`POST\` | \`/api/automation/scripts/run\` | 执行脚本 |
 | \`GET\` | \`/api/automation/scripts/runs\` | 查运行记录 |
+| \`POST\` | \`/api/automation/hooks/{hookPath}\` | 调用脚本公开 Hook |
 
 ## 列脚本
 
@@ -299,12 +316,36 @@ curl -X POST http://127.0.0.1:19876/api/automation/scripts/run \\
 curl http://127.0.0.1:19876/api/automation/scripts/runs?limit=20
 \`\`\`
 
+## 调用公开 Hook
+
+脚本启用 Public API 后，可以使用脚本详情中 \`publicAPI.path\` 对应的路径调用。当前公开 Hook 仅支持 \`POST\`。
+
+\`\`\`bash
+curl -X POST http://127.0.0.1:19876/api/automation/hooks/image/chatgpt-generate-download \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "instance": {
+      "type": "existing",
+      "selector": { "code": "BUYER_001" }
+    },
+    "params": {
+      "prompt": "A cinematic chrome ant browser mascot"
+    },
+    "timeoutMs": 300000
+  }'
+\`\`\`
+
+- 不传 \`instance\` 时沿用脚本默认目标
+- \`instance.type\` 支持 \`script-default / existing / rotate / create\`
+- Hook 执行失败也可能返回 HTTP 200，必须同时检查响应里的 \`ok\` 与 \`status\`
+
 ## 记住这几个规则
 
 \`\`\`text
 scriptId 必填
 推荐优先使用 selector.code，而不是 profileId
 selector / params 必须是 JSON object
+targetInput 必须是 JSON object
 不传 selector / params 时，默认沿用脚本内配置
 \`\`\`
 `

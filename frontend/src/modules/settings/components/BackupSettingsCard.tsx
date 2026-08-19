@@ -92,6 +92,8 @@ export function BackupSettingsCard({
   onExport,
   onOpenImport,
 }: BackupSettingsCardProps) {
+  const actionRunning = actionLoading !== 'none'
+
   return (
     <Card title="配置备份与恢复" subtitle="初始化、导出、加载全量配置与浏览器数据">
       <div className="space-y-3">
@@ -104,6 +106,7 @@ export function BackupSettingsCard({
             size="sm"
             onClick={onInitialize}
             loading={actionLoading === 'init'}
+            disabled={actionRunning}
           >
             <RotateCcw className="w-4 h-4" />
             初始化系统
@@ -113,11 +116,12 @@ export function BackupSettingsCard({
             size="sm"
             onClick={onExport}
             loading={actionLoading === 'export'}
+            disabled={actionRunning}
           >
             <Download className="w-4 h-4" />
             导出配置
           </Button>
-          <Button size="sm" onClick={onOpenImport}>
+          <Button size="sm" onClick={onOpenImport} disabled={actionRunning}>
             <Upload className="w-4 h-4" />
             加载配置
           </Button>
@@ -143,22 +147,23 @@ export function BackupImportModal({
   onImport,
 }: BackupImportModalProps) {
   const importRunning = actionLoading === 'import-reset' || actionLoading === 'import-merge'
+  const actionRunning = actionLoading !== 'none'
 
   return (
     <Modal
       open={open}
       onClose={() => {
-        if (actionLoading !== 'none') {
+        if (actionRunning) {
           return
         }
         onClose()
       }}
       title="加载配置"
       width="520px"
-      closable={!importRunning}
+      closable={!actionRunning}
       footer={(
         <>
-          {!importRunning && (
+          {!actionRunning && (
             <Button variant="secondary" onClick={onClose}>
               取消
             </Button>
@@ -167,14 +172,14 @@ export function BackupImportModal({
             variant="danger"
             onClick={() => onImport(true)}
             loading={actionLoading === 'import-reset'}
-            disabled={actionLoading !== 'none' && actionLoading !== 'import-reset'}
+            disabled={actionRunning}
           >
             是，先初始化后加载
           </Button>
           <Button
             onClick={() => onImport(false)}
             loading={actionLoading === 'import-merge'}
-            disabled={actionLoading !== 'none' && actionLoading !== 'import-merge'}
+            disabled={actionRunning}
           >
             否，直接加载并判重
           </Button>

@@ -1,5 +1,5 @@
 ﻿import { useState } from 'react'
-import { toast } from '../../../shared/components'
+import { ConfirmModal, toast } from '../../../shared/components'
 import type { BrowserProfile, BrowserProfileCopyOptions, BrowserProxy } from '../types'
 import { BrowserCoreEditorModal, BrowserListHeader, BrowserListSettingsModal } from '../components/BrowserListLayout'
 import { BatchToolbar } from '../components/BrowserListWidgets'
@@ -51,6 +51,7 @@ export function BrowserListPage() {
   const [profilePackageBusy, setProfilePackageBusy] = useState(false)
   const [backupModalOpen, setBackupModalOpen] = useState(false)
   const [backupLoadingMode, setBackupLoadingMode] = useState<BackupLoadingMode>('none')
+  const [backupResetConfirmOpen, setBackupResetConfirmOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{
     open: boolean
     mode: 'single' | 'batch'
@@ -357,19 +358,25 @@ export function BrowserListPage() {
     }
   }
 
-  const handleImportFullBackup = async (resetFirst: boolean) => {
-    if (backupLoadingMode !== 'none') return
+  const handleImportFullBackup = async (resetFirst: boolean): Promise<boolean> => {
+    if (backupLoadingMode !== 'none') return false
     const mode: BackupLoadingMode = resetFirst ? 'import-reset' : 'import-merge'
     setBackupLoadingMode(mode)
     try {
       const result = await importFullBrowserBackup(resetFirst)
-      if (result.cancelled) return
+      if (result.cancelled) return true
       toast.success(result.message || (resetFirst ? '备份已恢复' : '备份已合并'))
       setSelectedIds(new Set())
       setBackupModalOpen(false)
-      await loadProfiles()
+      try {
+        await loadProfiles()
+      } catch (error: any) {
+        toast.warning(error?.message || '备份已导入，但刷新实例列表失败，请手动刷新')
+      }
+      return true
     } catch (error: any) {
       toast.error(error?.message || '导入备份失败')
+      return false
     } finally {
       setBackupLoadingMode('none')
     }
@@ -449,22 +456,45 @@ export function BrowserListPage() {
       : deleteConfirm.profileId ? [deleteConfirm.profileId] : []
     if (ids.length === 0) return
     setBatchLoading(true)
+    const deletedIds: string[] = []
+    const failures: string[] = []
     try {
       for (const id of ids) {
-        await deleteBrowserProfile(id)
+        try {
+          await deleteBrowserProfile(id)
+          deletedIds.push(id)
+        } catch (error: any) {
+          const profileName = profiles.find(profile => profile.profileId === id)?.profileName || id
+          failures.push(`${profileName}：${error?.message || '删除失败'}`)
+        }
       }
-      setSelectedIds(prev => {
-        const next = new Set(prev)
-        ids.forEach(id => next.delete(id))
-        return next
-      })
-      toast.success(ids.length > 1 ? `已删除 ${ids.length} 个实例` : '配置已删除')
-      setDeleteConfirm({ open: false, mode: 'single', count: 0 })
-      loadProfiles()
-    } catch (error: any) {
-      toast.error(error?.message || '删除失败')
+      if (deletedIds.length > 0) {
+        setSelectedIds(prev => {
+          const next = new Set(prev)
+          deletedIds.forEach(id => next.delete(id))
+          return next
+        })
+      }
+      if (failures.length === 0) {
+        toast.success(deletedIds.length > 1 ? `已删除 ${deletedIds.length} 个实例` : '配置已删除')
+        setDeleteConfirm({ open: false, mode: 'single', count: 0 })
+      } else {
+        if (deletedIds.length > 0) {
+          toast.warning(`已删除 ${deletedIds.length} 个实例，${failures.length} 个失败`)
+        }
+        const preview = failures.slice(0, 3)
+        const more = failures.length > preview.length ? `\n另有 ${failures.length - preview.length} 个实例删除失败。` : ''
+        toast.error(`以下实例删除失败：\n${preview.join('\n')}${more}`)
+        setDeleteConfirm(prev => ({ ...prev, count: failures.length }))
+      }
     } finally {
-      setBatchLoading(false)
+      try {
+        await loadProfiles()
+      } catch (error: any) {
+        toast.error(error?.message || '刷新实例列表失败')
+      } finally {
+        setBatchLoading(false)
+      }
     }
   }
 
@@ -567,7 +597,17 @@ export function BrowserListPage() {
         onExportSelected={() => { void handleBatchExport() }}
         onExportFull={() => { void handleExportFullBackup() }}
         onImportMerge={() => { void handleImportFullBackup(false) }}
-        onImportReset={() => { void handleImportFullBackup(true) }}
+        onImportReset={() => setBackupResetConfirmOpen(true)}
+      />
+
+      <ConfirmModal
+        open={backupResetConfirmOpen}
+        onClose={() => setBackupResetConfirmOpen(false)}
+        onConfirm={() => handleImportFullBackup(true)}
+        title="清空并恢复备份"
+        content="将先清空当前实例、代理、内核、插件及浏览器数据，再从所选备份包恢复。若随后取消文件选择，不会执行清空；确认继续？"
+        confirmText="选择备份并恢复"
+        danger
       />
 
       <BrowserProfilesPanel

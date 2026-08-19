@@ -42,14 +42,23 @@ export function useProxySelection({ proxies, filteredList, saveProxies }: UsePro
     })
   }
 
-  const handleBatchDeleteConfirm = async () => {
+  const handleBatchDeleteConfirm = async (): Promise<boolean> => {
+    const deletableIds = new Set(
+      Array.from(selectedIds).filter(proxyId => !BUILTIN_PROXY_IDS.has(proxyId)),
+    )
+    if (deletableIds.size === 0) {
+      toast.warning('没有可删除的代理')
+      return false
+    }
     try {
-      const newProxies = proxies.filter(p => !selectedIds.has(p.proxyId))
+      const newProxies = proxies.filter(p => !deletableIds.has(p.proxyId))
       await saveProxies(newProxies)
-      toast.success(`已删除 ${selectedIds.size} 个代理`)
+      toast.success(`已删除 ${deletableIds.size} 个代理`)
       setSelectedIds(new Set())
+      return true
     } catch (error: any) {
       toast.error(error?.message || '删除失败')
+      return false
     }
   }
 

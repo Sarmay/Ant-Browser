@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Trash2 } from 'lucide-react'
-import { Badge, Button, Card } from '../../../shared/components'
+import { Badge, Button, Card, ConfirmModal, toast } from '../../../shared/components'
 
 interface LogEntry {
   time: string
@@ -38,10 +38,8 @@ async function fetchLogs(): Promise<LogEntry[]> {
 }
 
 async function clearLogs() {
-  try {
-    const bindings: any = await import('../../../wailsjs/go/main/App')
-    await bindings.ClearAppLogs()
-  } catch { /* ignore */ }
+  const bindings: any = await import('../../../wailsjs/go/main/App')
+  await bindings.ClearAppLogs()
 }
 
 export function BrowserLogsPage() {
@@ -57,6 +55,7 @@ export function BrowserLogsPage() {
   const [timeTo, setTimeTo] = useState('')
   const [autoScroll, setAutoScroll] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
   const logContainerRef = useRef<HTMLDivElement>(null)
   const initialScrollDoneRef = useRef(false)
 
@@ -90,9 +89,16 @@ export function BrowserLogsPage() {
     }
   }, [logs, autoScroll])
 
-  const handleClear = async () => {
-    await clearLogs()
-    setLogs([])
+  const handleClear = async (): Promise<boolean> => {
+    try {
+      await clearLogs()
+      setLogs([])
+      toast.success('日志已清空')
+      return true
+    } catch (error: any) {
+      toast.error(error?.message || '清空日志失败')
+      return false
+    }
   }
 
   const filtered = logs.filter(entry => {
@@ -149,7 +155,7 @@ export function BrowserLogsPage() {
           <Button variant="secondary" size="sm" onClick={load} loading={loading}>
             <RefreshCw className="w-4 h-4" />刷新
           </Button>
-          <Button variant="secondary" size="sm" onClick={handleClear}>
+          <Button variant="secondary" size="sm" onClick={() => setClearConfirmOpen(true)} disabled={logs.length === 0}>
             <Trash2 className="w-4 h-4" />清空
           </Button>
         </div>
@@ -310,6 +316,16 @@ export function BrowserLogsPage() {
           )}
         </div>
       </Card>
+
+      <ConfirmModal
+        open={clearConfirmOpen}
+        onClose={() => setClearConfirmOpen(false)}
+        onConfirm={handleClear}
+        title="清空日志"
+        content="确定清空全部应用日志？此操作不可恢复。"
+        confirmText="确认清空"
+        danger
+      />
     </div>
   )
 }

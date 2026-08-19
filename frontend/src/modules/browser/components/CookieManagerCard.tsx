@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Download, RefreshCw, Trash2 } from 'lucide-react'
-import { Badge, Button, Card, Input, Table, toast } from '../../../shared/components'
+import { Badge, Button, Card, ConfirmModal, Input, Table, toast } from '../../../shared/components'
 import type { TableColumn } from '../../../shared/components/Table'
 import type { CookieInfo } from '../types'
 import { clearBrowserCookies, exportBrowserCookies, fetchBrowserCookies } from '../api'
@@ -48,17 +48,18 @@ export function CookieManagerCard({ profileId, profileName, running, ready }: Pr
     return cookies.filter(c => c.domain.toLowerCase().includes(kw))
   }, [cookies, filterDomain])
 
-  const handleClear = async () => {
+  const handleClear = async (): Promise<boolean> => {
     setClearing(true)
     try {
       await clearBrowserCookies(profileId)
       setCookies([])
       toast.success('Cookie 已清除')
-    } catch {
-      toast.error('清除 Cookie 失败')
+      return true
+    } catch (error: any) {
+      toast.error(error?.message || '清除 Cookie 失败')
+      return false
     } finally {
       setClearing(false)
-      setShowConfirm(false)
     }
   }
 
@@ -110,7 +111,8 @@ export function CookieManagerCard({ profileId, profileName, running, ready }: Pr
       : `共 ${cookies.length} 条${filterDomain ? `，已过滤 ${filteredCookies.length} 条` : ''}`
 
   return (
-    <Card title="Cookie 管理" subtitle={subtitle}>
+    <>
+      <Card title="Cookie 管理" subtitle={subtitle}>
       {!running ? (
         <p className="text-sm text-[var(--color-text-muted)] py-4 text-center">
           请先启动实例以查看 Cookie
@@ -144,21 +146,19 @@ export function CookieManagerCard({ profileId, profileName, running, ready }: Pr
             </div>
           </div>
 
-          {showConfirm && (
-            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-4 flex items-center justify-between gap-4">
-              <span className="text-sm text-[var(--color-text-secondary)]">
-                确认清除该实例的所有 Cookie？此操作不可撤销。
-              </span>
-              <div className="flex gap-2 flex-shrink-0">
-                <Button size="sm" variant="ghost" onClick={() => setShowConfirm(false)}>取消</Button>
-                <Button size="sm" onClick={handleClear} disabled={clearing}>确认清除</Button>
-              </div>
-            </div>
-          )}
-
           <Table columns={columns} data={filteredCookies} rowKey="name" />
         </div>
       )}
-    </Card>
+      </Card>
+      <ConfirmModal
+        open={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        onConfirm={handleClear}
+        title="清除全部 Cookie"
+        content={`确定清除实例「${profileName}」的所有 Cookie？此操作不可恢复。`}
+        confirmText="清除全部"
+        danger
+      />
+    </>
   )
 }

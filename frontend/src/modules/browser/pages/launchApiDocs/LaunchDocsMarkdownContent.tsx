@@ -6,8 +6,18 @@ import { Button, toast } from '../../../../shared/components'
 import { openProjectRoot } from '../../api/filesystem'
 import { LaunchDocsCodeBlock } from './LaunchDocsCodeBlock'
 
-export function LaunchDocsMarkdownContent({ content, docId }: { content: string; docId?: string }) {
-  const showProjectRootAction = docId === 'tutorial-skill'
+interface LaunchDocsMarkdownContentProps {
+  content: string
+  docId?: string
+  standalone?: boolean
+}
+
+export function LaunchDocsMarkdownContent({
+  content,
+  docId,
+  standalone = false,
+}: LaunchDocsMarkdownContentProps) {
+  const showProjectRootAction = !standalone && docId === 'tutorial-skill'
 
   return (
     <div className="space-y-4">
@@ -116,9 +126,14 @@ export function LaunchDocsMarkdownContent({ content, docId }: { content: string;
           a: ({ href, children }) => (
             <a
               href={href}
+              target={standalone ? '_blank' : undefined}
+              rel={standalone ? 'noreferrer' : undefined}
               onClick={(event) => {
-                event.preventDefault()
-                if (href) {
+                const wailsRuntime = (window as Window & {
+                  runtime?: { BrowserOpenURL?: (url: string) => void }
+                }).runtime
+                if (href && typeof wailsRuntime?.BrowserOpenURL === 'function') {
+                  event.preventDefault()
                   BrowserOpenURL(href)
                 }
               }}

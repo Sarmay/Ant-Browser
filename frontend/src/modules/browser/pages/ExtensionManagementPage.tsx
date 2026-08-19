@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { toast } from '../../../shared/components'
+import { ConfirmModal, toast } from '../../../shared/components'
 import type { BrowserExtension, BrowserExtensionLookupResult, BrowserProxy } from '../types'
 import {
   deleteBrowserExtension,
@@ -48,6 +48,7 @@ export function ExtensionManagementPage() {
   const [downloadDirOpen, setDownloadDirOpen] = useState(false)
   const [lastLookupProxyLabel, setLastLookupProxyLabel] = useState('')
   const [limitExtension, setLimitExtension] = useState<BrowserExtension | null>(null)
+  const [deleteCandidate, setDeleteCandidate] = useState<BrowserExtension | null>(null)
 
   const installedIds = useMemo(() => new Set(items.map((item) => item.extensionId)), [items])
   const selectedProxy = useMemo(
@@ -321,6 +322,7 @@ export function ExtensionManagementPage() {
   }
 
   const handleUpdateExtension = async (item: BrowserExtension) => {
+    if (updatingId === item.extensionId || busyId === item.extensionId) return
     if (useProxy && !downloadProxyConfig) {
       toast.warning('请先选择可用的下载代理')
       return
@@ -362,6 +364,7 @@ export function ExtensionManagementPage() {
   }
 
   const handleToggle = async (item: BrowserExtension) => {
+    if (updatingId === item.extensionId || busyId === item.extensionId) return
     setBusyId(item.extensionId)
     setBusyAction('toggle')
     try {
@@ -375,16 +378,24 @@ export function ExtensionManagementPage() {
     }
   }
 
-  const handleDelete = async (item: BrowserExtension) => {
-    if (!window.confirm(`删除插件「${item.name || item.extensionId}」？`)) return
+  const handleDelete = (item: BrowserExtension) => {
+    if (updatingId === item.extensionId || busyId === item.extensionId) return
+    setDeleteCandidate(item)
+  }
+
+  const handleDeleteConfirm = async (): Promise<boolean> => {
+    const item = deleteCandidate
+    if (!item || updatingId === item.extensionId || busyId === item.extensionId) return false
     setBusyId(item.extensionId)
     setBusyAction('delete')
     try {
       await deleteBrowserExtension(item.extensionId)
       setItems((current) => current.filter((entry) => entry.extensionId !== item.extensionId))
       toast.success('插件已删除')
+      return true
     } catch (error: any) {
       toast.error(error?.message || '删除插件失败')
+      return false
     } finally {
       setBusyId('')
       setBusyAction('')
@@ -528,7 +539,17 @@ export function ExtensionManagementPage() {
         onRestrictProfiles={setLimitExtension}
         onUpdate={(target) => void handleUpdateExtension(target)}
         onToggle={(target) => void handleToggle(target)}
-        onDelete={(target) => void handleDelete(target)}
+        onDelete={handleDelete}
+      />
+
+      <ConfirmModal
+        open={!!deleteCandidate}
+        onClose={() => setDeleteCandidate(null)}
+        onConfirm={handleDeleteConfirm}
+        title="删除插件"
+        content={`确定删除插件「${deleteCandidate?.name || deleteCandidate?.extensionId || ''}」？插件文件及实例关联配置将一并移除。`}
+        confirmText="删除"
+        danger
       />
     </div>
 

@@ -400,7 +400,7 @@ http://127.0.0.1:19876
 curl -H "X-Ant-Api-Key: <your-api-key>" http://127.0.0.1:19876/api/health
 \`\`\`
 
-没开认证时，去掉这个请求头即可。
+没开认证时，去掉这个请求头即可。认证只作用于 \`/api/*\`；CDP 反向代理和文档页面不读取 API Key。LaunchServer 默认只监听本机地址，非 localhost 请求会被拒绝。
 
 ## 全部接口
 
@@ -424,6 +424,7 @@ curl -H "X-Ant-Api-Key: <your-api-key>" http://127.0.0.1:19876/api/health
 | 自动化脚本 | \`GET\` | \`/api/automation/scripts/{scriptId}\` |
 | 自动化脚本 | \`POST\` | \`/api/automation/scripts/run\` |
 | 自动化脚本 | \`GET\` | \`/api/automation/scripts/runs\` |
+| 自动化 Hook | \`POST\` | \`/api/automation/hooks/{hookPath}\` |
 | 调用日志 | \`GET\` | \`/api/launch/logs\` |
 | CDP 统一入口 | \`GET\` | \`/json/version\` |
 | CDP 统一入口 | \`GET\` | \`/json/list\` |
@@ -440,7 +441,7 @@ curl -H "X-Ant-Api-Key: <your-api-key>" http://127.0.0.1:19876/api/health
 }
 \`\`\`
 
-也可以把 \`code / profileId / profileName / keyword / tags / groupId / matchMode\` 放在请求体顶层；新接入建议统一放进 \`selector\`。
+也可以把 \`code / key / profileId / profileName / keyword / tags / groupId / matchMode\` 放在请求体顶层；新接入建议统一放进 \`selector\`。
 
 ## 怎么选接口
 

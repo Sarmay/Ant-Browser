@@ -14,10 +14,12 @@ import { AUTOMATION_API_ENDPOINT_DOCS } from './structuredApiDocs.automationEndp
 import { PROFILE_API_ENDPOINT_DOCS } from './structuredApiDocs.profileEndpoints'
 import { RUNTIME_API_ENDPOINT_DOCS } from './structuredApiDocs.runtimeEndpoints'
 import { STRUCTURED_API_SECTION_DOCS } from './structuredApiDocs.sections'
+import { SYSTEM_API_ENDPOINT_DOCS } from './structuredApiDocs.systemEndpoints'
 
 export { STRUCTURED_API_SECTION_DOCS } from './structuredApiDocs.sections'
 
 export const STRUCTURED_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
+  ...SYSTEM_API_ENDPOINT_DOCS,
   ...PROFILE_API_ENDPOINT_DOCS,
   ...RUNTIME_API_ENDPOINT_DOCS,
   ...AUTOMATION_API_ENDPOINT_DOCS,

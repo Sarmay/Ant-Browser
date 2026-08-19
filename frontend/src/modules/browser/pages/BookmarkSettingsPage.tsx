@@ -72,10 +72,15 @@ export function BookmarkSettingsPage() {
   }
 
   const handleReset = async () => {
-    await resetBookmarks()
-    const fresh = await fetchBookmarks()
-    setItems(fresh)
-    toast.success('已恢复默认书签')
+    try {
+      await resetBookmarks()
+      const fresh = await fetchBookmarks()
+      setItems(fresh)
+      toast.success('已恢复默认书签')
+    } catch (error: any) {
+      toast.error(error?.message || '恢复默认书签失败')
+      return false
+    }
   }
 
   const handleSync = async () => {

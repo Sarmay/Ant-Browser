@@ -240,6 +240,7 @@ export function InstalledExtensionCard({ item, busy, busyAction, updating, onRes
   const meta = getExtensionManifestMeta(item)
   const storeUrl = extensionStoreURL(item)
   const actionButtonClass = 'min-w-[72px] will-change-transform hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]'
+  const operationPending = updating || busy
   return (
     <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-3 shadow-[var(--shadow-xs)]">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -288,15 +289,15 @@ export function InstalledExtensionCard({ item, busy, busyAction, updating, onRes
             <Users className="h-4 w-4" />
             限制实例
           </Button>
-          <Button type="button" size="sm" variant="secondary" onClick={() => onUpdate(item)} disabled={updating} className={actionButtonClass}>
+          <Button type="button" size="sm" variant="secondary" onClick={() => onUpdate(item)} disabled={operationPending} loading={updating} className={actionButtonClass}>
             <RotateCw className={`h-4 w-4 ${updating ? 'animate-spin' : ''}`} />
             更新
           </Button>
-          <Button type="button" size="sm" variant="secondary" onClick={() => onToggle(item)} disabled={busy} className={actionButtonClass}>
+          <Button type="button" size="sm" variant="secondary" onClick={() => onToggle(item)} disabled={operationPending} loading={busy && busyAction === 'toggle'} className={actionButtonClass}>
             <Power className={`h-4 w-4 ${busy && busyAction === 'toggle' ? 'animate-pulse' : ''}`} />
             {item.enabled ? '停用' : '启用'}
           </Button>
-          <Button type="button" size="sm" variant="secondary" onClick={() => onDelete(item)} disabled={busy} className={actionButtonClass}>
+          <Button type="button" size="sm" variant="secondary" onClick={() => onDelete(item)} disabled={operationPending} loading={busy && busyAction === 'delete'} className={actionButtonClass}>
             <Trash2 className={`h-4 w-4 ${busy && busyAction === 'delete' ? 'animate-pulse' : ''}`} />
             删除
           </Button>

@@ -101,6 +101,7 @@ require_cmd() {
 require_cmd python3
 require_cmd ditto
 require_cmd wails
+require_cmd codesign
 
 if [[ -z "$VERSION" ]]; then
   VERSION="$(python3 - "$ROOT_DIR/wails.json" <<'PY'
@@ -207,7 +208,7 @@ if [[ "$SKIP_BUILD" -ne 1 ]]; then
   echo "[3/4] Building macOS app bundle with Wails..."
   (
     cd "$ROOT_DIR"
-    wails build -s -platform "darwin/$ARCH" -o ant-chrome
+    wails build -clean -s -platform "darwin/$ARCH" -o ant-chrome
   )
 else
   echo "[WARN] skipping build step"
@@ -230,6 +231,7 @@ if [[ ! -d "$APP_MACOS_DIR" ]]; then
   exit 1
 fi
 
+rm -rf "$APP_MACOS_DIR/bin"
 mkdir -p "$APP_MACOS_DIR/bin"
 cp "$XRAY_SRC" "$APP_MACOS_DIR/bin/xray"
 cp "$SINGBOX_SRC" "$APP_MACOS_DIR/bin/sing-box"
@@ -240,6 +242,9 @@ if [[ -f "$CHROME_README_SRC" ]]; then
   mkdir -p "$APP_MACOS_DIR/chrome"
   cp "$CHROME_README_SRC" "$APP_MACOS_DIR/chrome/README.md"
 fi
+
+codesign --force --deep --sign - "$APP_STAGE"
+codesign --verify --deep --strict "$APP_STAGE"
 
 ditto "$APP_STAGE" "$APP_EXPORT"
 rm -f "$OUTPUT_DIR/$ZIP_NAME"

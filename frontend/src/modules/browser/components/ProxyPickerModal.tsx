@@ -314,8 +314,8 @@ export function ProxyPickerModal({ open, currentProxyId, title = '从代理池�
     setDeleteCandidate(proxy)
   }
 
-  const handleDeleteConfirm = async () => {
-    if (!deleteCandidate) return
+  const handleDeleteConfirm = async (): Promise<boolean> => {
+    if (!deleteCandidate) return false
     const nextProxies = allProxies.filter(item => item.proxyId !== deleteCandidate.proxyId)
     try {
       await saveBrowserProxies(nextProxies)
@@ -324,8 +324,10 @@ export function ProxyPickerModal({ open, currentProxyId, title = '从代理池�
       onProxyDeleted?.(deleteCandidate.proxyId, nextProxies)
       toast.success('代理已删除')
       setDeleteCandidate(null)
+      return true
     } catch (error: any) {
       toast.error(error?.message || '删除失败')
+      return false
     }
   }
 

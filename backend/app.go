@@ -9,6 +9,7 @@ import (
 	"ant-chrome/backend/internal/logger"
 	"ant-chrome/backend/internal/proxy"
 	"context"
+	"io/fs"
 	"strings"
 	"sync"
 )
@@ -36,6 +37,7 @@ type App struct {
 	speedScheduler *browser.ProxySpeedScheduler
 	appRoot        string
 	version        string
+	docsFS         fs.FS
 
 	forceQuit              bool
 	quitMode               quitMode
@@ -63,6 +65,13 @@ func NewApp(appRoot string, appVersion ...string) *App {
 		deferredStartTargets:   make(map[string]deferredStartTargetsPlan),
 		automationTargetCursor: make(map[string]string),
 	}
+}
+
+// NewAppWithDocsFS creates an app with the embedded, read-only docs frontend.
+func NewAppWithDocsFS(appRoot string, docsFS fs.FS, appVersion ...string) *App {
+	app := NewApp(appRoot, appVersion...)
+	app.docsFS = docsFS
+	return app
 }
 
 func (a *App) appName() string {

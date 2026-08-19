@@ -5,6 +5,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -73,6 +74,9 @@ func resolveBuildVersion() string {
 }
 
 func NewApp(appRoot, version string) *App {
+	if docsFS, err := fs.Sub(assets, "frontend/dist"); err == nil {
+		return &App{App: backend.NewAppWithDocsFS(appRoot, docsFS, version)}
+	}
 	return &App{App: backend.NewApp(appRoot, version)}
 }
 

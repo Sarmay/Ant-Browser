@@ -148,6 +148,10 @@ func (a *App) BrowserSnapshotRestore(profileId, snapshotId string) error {
 
 // BrowserSnapshotDelete 删除快照
 func (a *App) BrowserSnapshotDelete(profileId, snapshotId string) error {
+	if _, err := a.getProfileForSnapshot(profileId); err != nil {
+		return err
+	}
+
 	snapDir, err := a.snapshotDir(profileId)
 	if err != nil {
 		return err
@@ -156,7 +160,11 @@ func (a *App) BrowserSnapshotDelete(profileId, snapshotId string) error {
 	if err != nil {
 		return err
 	}
-	_ = os.Remove(zipPath)
-	_ = os.Remove(metaPath)
+	if err := os.Remove(zipPath); err != nil {
+		return err
+	}
+	if err := os.Remove(metaPath); err != nil {
+		return err
+	}
 	return nil
 }

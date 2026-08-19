@@ -97,32 +97,48 @@ func (m *Manager) DeleteCore(coreId string) error {
 		return fmt.Errorf("内核ID不能为空")
 	}
 
+	cores := m.ListCores()
+	var target Core
+	found := false
+	for _, core := range cores {
+		if strings.EqualFold(core.CoreId, coreId) {
+			target = core
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("内核不存在: %s", coreId)
+	}
+	if len(cores) == 1 {
+		return fmt.Errorf("不能删除唯一内核")
+	}
+	if target.IsDefault {
+		return fmt.Errorf("不能删除默认内核，请先设置其他内核为默认内核")
+	}
+	if count := m.CountInstancesByCore(target.CoreId); count > 0 {
+		return fmt.Errorf("内核正在被 %d 个实例引用，无法删除", count)
+	}
+
 	if m.CoreDAO != nil {
-		if err := m.CoreDAO.Delete(coreId); err != nil {
+		if err := m.CoreDAO.Delete(target.CoreId); err != nil {
 			return err
 		}
 		m.syncCoresFromDAO()
-		log.Info("内核配置删除", logger.F("core_id", coreId))
+		log.Info("内核配置删除", logger.F("core_id", target.CoreId))
 		return nil
 	}
 
 	// 降级
 	index := -1
-	for i, core := range m.Config.Browser.Cores {
-		if strings.EqualFold(core.CoreId, coreId) {
+	for i, core := range cores {
+		if strings.EqualFold(core.CoreId, target.CoreId) {
 			index = i
 			break
 		}
 	}
-	if index < 0 {
-		return fmt.Errorf("内核不存在: %s", coreId)
-	}
-	wasDefault := m.Config.Browser.Cores[index].IsDefault
 	m.Config.Browser.Cores = append(m.Config.Browser.Cores[:index], m.Config.Browser.Cores[index+1:]...)
-	if wasDefault && len(m.Config.Browser.Cores) > 0 {
-		m.Config.Browser.Cores[0].IsDefault = true
-	}
-	log.Info("内核配置删除（文件）", logger.F("core_id", coreId))
+	log.Info("内核配置删除（文件）", logger.F("core_id", target.CoreId))
 	return m.Config.Save(m.ResolveRelativePath("config.yaml"))
 }
 

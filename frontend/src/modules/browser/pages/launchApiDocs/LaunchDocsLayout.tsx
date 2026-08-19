@@ -5,6 +5,7 @@ interface LaunchDocsLayoutProps {
   header: ReactNode
   content: ReactNode
   contextRail?: ReactNode
+  standalone?: boolean
 }
 
 export function LaunchDocsLayout({
@@ -12,11 +13,12 @@ export function LaunchDocsLayout({
   header,
   content,
   contextRail,
+  standalone = false,
 }: LaunchDocsLayoutProps) {
   const hasContextRail = Boolean(contextRail)
 
   return (
-    <div className="-m-5 min-h-full bg-[var(--color-bg-subtle)]">
+    <div className={`${standalone ? 'min-h-screen' : '-m-5 min-h-full'} bg-[var(--color-bg-subtle)]`}>
       <div className={hasContextRail
         ? 'xl:grid xl:min-h-full xl:grid-cols-[280px_minmax(0,1fr)_360px]'
         : 'xl:grid xl:min-h-full xl:grid-cols-[280px_minmax(0,1fr)]'}

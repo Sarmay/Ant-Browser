@@ -164,6 +164,7 @@ export function BrowserListDialogs({
         onClose={onCloseDeleteConfirm}
         title="删除实例"
         width="400px"
+        closable={!deleting}
         footer={
           <>
             <Button variant="secondary" onClick={onCloseDeleteConfirm} disabled={deleting}>取消</Button>
@@ -241,6 +242,7 @@ export function BrowserListDialogs({
         onClose={onClosePermanentDelete}
         title="彻底删除实例"
         width="420px"
+        closable={!permanentlyDeletingId}
         footer={
           <>
             <Button variant="secondary" onClick={onClosePermanentDelete} disabled={!!permanentlyDeletingId}>取消</Button>

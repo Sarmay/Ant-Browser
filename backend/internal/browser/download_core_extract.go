@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -21,6 +22,12 @@ type archiveEntryMeta struct {
 type archiveProgress struct {
 	index int
 	total int
+}
+
+type pendingArchiveHardlink struct {
+	name       string
+	targetPath string
+	linkPath   string
 }
 
 func SupportedCoreArchivePattern() string {
@@ -83,7 +90,7 @@ func extractZipArchiveAndStripRoot(archivePath, dest string, progressCb func(int
 		metas = append(metas, archiveEntryMeta{Name: file.Name})
 	}
 	rootPrefix, hasCommonRoot := detectCommonArchiveRoot(metas)
-	if err := os.MkdirAll(dest, 0o755); err != nil {
+	if err := prepareArchiveDestination(dest); err != nil {
 		return err
 	}
 
@@ -98,20 +105,31 @@ func extractZipArchiveAndStripRoot(archivePath, dest string, progressCb func(int
 		if err != nil {
 			return err
 		}
-		if file.FileInfo().IsDir() {
-			if err := os.MkdirAll(targetPath, file.Mode().Perm()); err != nil {
-				return err
+		if file.Mode()&os.ModeSymlink != 0 {
+			linkTarget, err := readArchiveSymlinkTarget(file)
+			if err != nil {
+				return fmt.Errorf("读取压缩包符号链接失败 %s: %w", file.Name, err)
+			}
+			if err := createArchiveSymlink(dest, targetPath, linkTarget); err != nil {
+				return fmt.Errorf("创建符号链接失败 %s: %w", cleanName, err)
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-			return err
+		if file.FileInfo().IsDir() {
+			if err := ensureArchiveDirectories(dest, targetPath, file.Mode().Perm()); err != nil {
+				return err
+			}
+			continue
 		}
 		rc, err := file.Open()
 		if err != nil {
 			return fmt.Errorf("读取压缩包文件失败 %s: %w", file.Name, err)
 		}
-		if err := writeReaderToFile(targetPath, rc, file.Mode().Perm()); err != nil {
+		if err := writeReaderToFile(dest, targetPath, rc, file.Mode().Perm()); err != nil {
+			_ = rc.Close()
+			return err
+		}
+		if err := rc.Close(); err != nil {
 			return err
 		}
 	}
@@ -120,7 +138,7 @@ func extractZipArchiveAndStripRoot(archivePath, dest string, progressCb func(int
 }
 
 func extractTarArchiveAndStripRoot(archivePath, dest string, progressCb func(int, string)) error {
-	if err := os.MkdirAll(dest, 0o755); err != nil {
+	if err := prepareArchiveDestination(dest); err != nil {
 		return err
 	}
 
@@ -138,6 +156,7 @@ func extractTarArchiveAndStripRoot(archivePath, dest string, progressCb func(int
 	reader := tar.NewReader(stream)
 	entryCount := 0
 	topLevels := make(map[string]struct{})
+	pendingHardlinks := make([]pendingArchiveHardlink, 0)
 	for {
 		header, err := reader.Next()
 		if err == io.EOF {
@@ -163,28 +182,45 @@ func extractTarArchiveAndStripRoot(archivePath, dest string, progressCb func(int
 		}
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(targetPath, header.FileInfo().Mode().Perm()); err != nil {
+			if err := ensureArchiveDirectories(dest, targetPath, header.FileInfo().Mode().Perm()); err != nil {
 				return err
 			}
 		case tar.TypeSymlink:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-				return err
-			}
-			_ = os.Remove(targetPath)
-			if err := os.Symlink(header.Linkname, targetPath); err != nil {
+			if err := createArchiveSymlink(dest, targetPath, header.Linkname); err != nil {
 				return fmt.Errorf("创建符号链接失败 %s: %w", cleanName, err)
 			}
-		case tar.TypeReg, tar.TypeRegA:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		case tar.TypeLink:
+			linkName := strippedArchiveName(header.Linkname, "", false)
+			linkPath, err := safeArchiveTargetPath(dest, linkName)
+			if err != nil {
+				return fmt.Errorf("非法硬链接目标 %s: %w", header.Linkname, err)
+			}
+			if err := ensureArchivePathHasNoSymlink(dest, linkPath); err != nil {
 				return err
 			}
-			if err := writeReaderToFile(targetPath, reader, header.FileInfo().Mode().Perm()); err != nil {
+			if err := ensureArchiveDirectories(dest, filepath.Dir(targetPath), 0o755); err != nil {
+				return err
+			}
+			if err := ensureArchivePathHasNoSymlink(dest, targetPath); err != nil {
+				return err
+			}
+			pendingHardlinks = append(pendingHardlinks, pendingArchiveHardlink{name: cleanName, targetPath: linkPath, linkPath: targetPath})
+		case tar.TypeReg, tar.TypeRegA:
+			if err := writeReaderToFile(dest, targetPath, reader, header.FileInfo().Mode().Perm()); err != nil {
 				return err
 			}
 		}
 	}
 	if entryCount == 0 {
 		return fmt.Errorf("空的压缩包")
+	}
+	for _, hardlink := range pendingHardlinks {
+		if err := ensureArchivePathHasNoSymlink(dest, hardlink.targetPath); err != nil {
+			return err
+		}
+		if err := os.Link(hardlink.targetPath, hardlink.linkPath); err != nil {
+			return fmt.Errorf("创建硬链接失败 %s: %w", hardlink.name, err)
+		}
 	}
 	if err := stripSingleExtractedRoot(dest, topLevels); err != nil {
 		return err
@@ -246,6 +282,9 @@ func detectCommonArchiveRoot(entries []archiveEntryMeta) (string, bool) {
 			return "", false
 		}
 	}
+	if isAppBundleRoot(rootPrefix) {
+		return "", false
+	}
 	return rootPrefix, rootPrefix != ""
 }
 
@@ -283,12 +322,15 @@ func stripSingleExtractedRoot(dest string, topLevels map[string]struct{}) error 
 	for name := range topLevels {
 		rootName = name
 	}
+	if isAppBundleRoot(rootName) {
+		return nil
+	}
 	rootPath, err := safeArchiveTargetPath(dest, rootName)
 	if err != nil {
 		return err
 	}
-	info, err := os.Stat(rootPath)
-	if err != nil || !info.IsDir() {
+	info, err := os.Lstat(rootPath)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return nil
 	}
 	entries, err := os.ReadDir(rootPath)
@@ -310,26 +352,241 @@ func stripSingleExtractedRoot(dest string, topLevels map[string]struct{}) error 
 	return os.Remove(rootPath)
 }
 
+func isAppBundleRoot(name string) bool {
+	return strings.HasSuffix(strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), "/")), ".app")
+}
+
 func normalizeArchiveEntryName(name string) string {
-	cleanName := filepath.ToSlash(strings.TrimSpace(name))
-	cleanName = strings.TrimPrefix(cleanName, "/")
-	return filepath.ToSlash(filepath.Clean(cleanName))
+	cleanName := strings.ReplaceAll(strings.TrimSpace(name), "\\", "/")
+	return path.Clean(cleanName)
 }
 
 func safeArchiveTargetPath(dest, cleanName string) (string, error) {
-	if cleanName == "." || strings.HasPrefix(cleanName, "../") || cleanName == ".." || filepath.IsAbs(cleanName) {
+	entryPath := filepath.FromSlash(cleanName)
+	if cleanName == "." || strings.HasPrefix(cleanName, "../") || cleanName == ".." || filepath.IsAbs(entryPath) || filepath.VolumeName(entryPath) != "" {
 		return "", fmt.Errorf("非法文件路径: %s", cleanName)
 	}
-	targetPath := filepath.Join(dest, filepath.FromSlash(cleanName))
-	destClean := filepath.Clean(dest)
-	targetClean := filepath.Clean(targetPath)
-	if targetClean != destClean && !strings.HasPrefix(targetClean, destClean+string(os.PathSeparator)) {
+	targetPath := filepath.Join(dest, entryPath)
+	if err := ensureArchivePathWithinDestination(dest, targetPath); err != nil {
 		return "", fmt.Errorf("非法文件路径: %s", cleanName)
 	}
 	return targetPath, nil
 }
 
-func writeReaderToFile(targetPath string, reader io.Reader, mode os.FileMode) error {
+func prepareArchiveDestination(dest string) error {
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		return err
+	}
+	info, err := os.Lstat(dest)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("解压目标目录无效: %s", dest)
+	}
+	return nil
+}
+
+func ensureArchivePathWithinDestination(dest, targetPath string) error {
+	destClean := canonicalArchivePath(filepath.Clean(dest))
+	targetClean := canonicalArchivePath(filepath.Clean(targetPath))
+	relativePath, err := filepath.Rel(destClean, targetClean)
+	if err != nil || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(os.PathSeparator)) || filepath.IsAbs(relativePath) {
+		return fmt.Errorf("路径越过解压目标目录: %s", targetPath)
+	}
+	return nil
+}
+
+func canonicalArchivePath(path string) string {
+	path = filepath.Clean(path)
+	currentPath := path
+	missingParts := make([]string, 0)
+	for {
+		if resolvedPath, err := filepath.EvalSymlinks(currentPath); err == nil {
+			for index := len(missingParts) - 1; index >= 0; index-- {
+				resolvedPath = filepath.Join(resolvedPath, missingParts[index])
+			}
+			return filepath.Clean(resolvedPath)
+		} else if !os.IsNotExist(err) {
+			return path
+		}
+		parentPath := filepath.Dir(currentPath)
+		if parentPath == currentPath {
+			return path
+		}
+		missingParts = append(missingParts, filepath.Base(currentPath))
+		currentPath = parentPath
+	}
+}
+
+func ensureArchiveDirectories(dest, directoryPath string, mode os.FileMode) error {
+	if err := ensureArchivePathWithinDestination(dest, directoryPath); err != nil {
+		return err
+	}
+	relativePath, err := filepath.Rel(filepath.Clean(dest), filepath.Clean(directoryPath))
+	if err != nil {
+		return err
+	}
+	if relativePath == "." {
+		return nil
+	}
+
+	currentPath := filepath.Clean(dest)
+	parts := strings.Split(relativePath, string(os.PathSeparator))
+	for index, part := range parts {
+		if part == "" || part == "." {
+			continue
+		}
+		currentPath = filepath.Join(currentPath, part)
+		info, err := os.Lstat(currentPath)
+		switch {
+		case err == nil:
+			if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+				return fmt.Errorf("解压路径包含非目录或符号链接: %s", currentPath)
+			}
+		case os.IsNotExist(err):
+			directoryMode := os.FileMode(0o755)
+			if index == len(parts)-1 {
+				directoryMode = mode
+			}
+			if err := os.Mkdir(currentPath, directoryMode); err != nil {
+				return err
+			}
+		default:
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureArchivePathHasNoSymlink(dest, targetPath string) error {
+	if err := ensureArchivePathWithinDestination(dest, targetPath); err != nil {
+		return err
+	}
+	relativePath, err := filepath.Rel(filepath.Clean(dest), filepath.Clean(targetPath))
+	if err != nil {
+		return err
+	}
+	if relativePath == "." {
+		return nil
+	}
+
+	currentPath := filepath.Clean(dest)
+	for _, part := range strings.Split(relativePath, string(os.PathSeparator)) {
+		if part == "" || part == "." {
+			continue
+		}
+		currentPath = filepath.Join(currentPath, part)
+		info, err := os.Lstat(currentPath)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("解压路径包含符号链接: %s", currentPath)
+		}
+	}
+	return nil
+}
+
+func createArchiveSymlink(dest, targetPath, linkTarget string) error {
+	if err := validateArchiveSymlinkTarget(dest, targetPath, linkTarget); err != nil {
+		return err
+	}
+	if err := ensureArchiveDirectories(dest, filepath.Dir(targetPath), 0o755); err != nil {
+		return err
+	}
+	if err := os.Remove(targetPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Symlink(linkTarget, targetPath); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateArchiveSymlinkTarget(dest, targetPath, linkTarget string) error {
+	if linkTarget == "" || strings.ContainsRune(linkTarget, '\x00') {
+		return fmt.Errorf("非法符号链接目标: %q", linkTarget)
+	}
+	normalizedTarget := strings.ReplaceAll(linkTarget, "\\", "/")
+	linkPath := filepath.FromSlash(normalizedTarget)
+	if path.IsAbs(normalizedTarget) || filepath.IsAbs(linkPath) || filepath.VolumeName(linkPath) != "" {
+		return fmt.Errorf("非法符号链接目标: %s", linkTarget)
+	}
+	resolvedTarget := filepath.Join(filepath.Dir(targetPath), linkPath)
+	if err := ensureArchivePathWithinDestination(dest, resolvedTarget); err != nil {
+		return fmt.Errorf("非法符号链接目标: %s: %w", linkTarget, err)
+	}
+	if err := ensureArchiveResolvedPathWithinDestination(dest, resolvedTarget); err != nil {
+		return fmt.Errorf("非法符号链接目标: %s: %w", linkTarget, err)
+	}
+	return nil
+}
+
+func ensureArchiveResolvedPathWithinDestination(dest, targetPath string) error {
+	if err := ensureArchivePathWithinDestination(dest, targetPath); err != nil {
+		return err
+	}
+	resolvedPath, err := filepath.EvalSymlinks(targetPath)
+	if err == nil {
+		if pathErr := ensureArchivePathWithinDestination(dest, resolvedPath); pathErr != nil {
+			return pathErr
+		}
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return err
+	}
+
+	// The target may be a forward reference that does not exist yet. Walk to
+	// the nearest existing ancestor and resolve any links there before allowing
+	// the new link to be created.
+	currentPath := filepath.Clean(targetPath)
+	for {
+		if _, statErr := os.Lstat(currentPath); statErr == nil {
+			resolvedAncestor, resolveErr := filepath.EvalSymlinks(currentPath)
+			if resolveErr != nil {
+				return resolveErr
+			}
+			return ensureArchivePathWithinDestination(dest, resolvedAncestor)
+		} else if !os.IsNotExist(statErr) {
+			return statErr
+		}
+		parentPath := filepath.Dir(currentPath)
+		if parentPath == currentPath {
+			return ensureArchivePathWithinDestination(dest, currentPath)
+		}
+		currentPath = parentPath
+	}
+}
+
+func readArchiveSymlinkTarget(file *zip.File) (string, error) {
+	reader, err := file.Open()
+	if err != nil {
+		return "", err
+	}
+	defer reader.Close()
+	const maxSymlinkTargetSize = 4 << 10
+	contents, err := io.ReadAll(io.LimitReader(reader, maxSymlinkTargetSize+1))
+	if err != nil {
+		return "", err
+	}
+	if len(contents) > maxSymlinkTargetSize {
+		return "", fmt.Errorf("符号链接目标过长")
+	}
+	return string(contents), nil
+}
+
+func writeReaderToFile(dest, targetPath string, reader io.Reader, mode os.FileMode) error {
+	if err := ensureArchiveDirectories(dest, filepath.Dir(targetPath), 0o755); err != nil {
+		return err
+	}
+	if err := ensureArchivePathHasNoSymlink(dest, targetPath); err != nil {
+		return err
+	}
 	outFile, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
 		return fmt.Errorf("打开解压文件写入失败 %s: %w", targetPath, err)

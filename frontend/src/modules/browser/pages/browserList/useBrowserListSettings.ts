@@ -109,14 +109,33 @@ export function useBrowserListSettings() {
     }
   }
 
-  const handleDeleteCore = async (coreId: string) => {
+  const handleDeleteCore = async (coreId: string): Promise<boolean> => {
+    const core = cores.find((item) => item.coreId === coreId)
+    if (!core) {
+      toast.error('内核不存在或已被删除')
+      return false
+    }
     if (cores.length <= 1) {
       toast.error('至少保留一个内核')
-      return
+      return false
     }
-    await deleteBrowserCore(coreId)
-    toast.success('内核已删除')
-    loadCores()
+    if (core.isDefault) {
+      toast.error('默认内核不能删除')
+      return false
+    }
+    try {
+      await deleteBrowserCore(coreId)
+      toast.success('内核已删除')
+      try {
+        await loadCores()
+      } catch (error: any) {
+        toast.warning(error?.message || '内核已删除，但刷新列表失败，请重新打开基础配置')
+      }
+      return true
+    } catch (error: any) {
+      toast.error(error?.message || '删除内核失败')
+      return false
+    }
   }
 
   const handleSetDefaultCore = async (coreId: string) => {

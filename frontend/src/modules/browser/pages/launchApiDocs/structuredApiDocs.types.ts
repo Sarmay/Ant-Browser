@@ -1,12 +1,15 @@
 ﻿export type StructuredApiMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'WS'
 
 export type StructuredApiSectionId =
+  | 'api-system'
   | 'api-profiles-launch'
   | 'api-runtime'
   | 'api-automation'
 
 export type StructuredApiDocId =
   | StructuredApiSectionId
+  | 'api-health-detail'
+  | 'api-launch-logs-detail'
   | 'api-profiles-list-detail'
   | 'api-profiles-create-detail'
   | 'api-profiles-get-detail'
@@ -27,6 +30,7 @@ export type StructuredApiDocId =
   | 'api-automation-script-detail'
   | 'api-automation-run-detail'
   | 'api-automation-runs-detail'
+  | 'api-automation-hook-detail'
 
 export interface StructuredApiExampleContext {
   launchBaseUrl: string
