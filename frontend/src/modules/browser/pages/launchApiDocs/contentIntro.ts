@@ -394,6 +394,12 @@ export const DOC_API_OVERVIEW = `# 接口总览
 http://127.0.0.1:19876
 \`\`\`
 
+## 文档浏览地址
+
+\`\`\`text
+http://127.0.0.1:19876/docs/?doc=api-overview
+\`\`\`
+
 ## 认证示例
 
 \`\`\`bash

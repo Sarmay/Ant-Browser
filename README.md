@@ -2,9 +2,9 @@
 
 > 面向多账号隔离、代理绑定和本地环境管理的桌面浏览器工具（Windows / Linux / macOS unsigned）。
 
-[![Release](https://img.shields.io/github/v/release/black-ant/Ant-Browser?sort=semver)](https://github.com/black-ant/Ant-Browser/releases)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)](https://github.com/black-ant/Ant-Browser/releases)
-[![Issues](https://img.shields.io/github/issues/black-ant/Ant-Browser)](https://github.com/black-ant/Ant-Browser/issues)
+[![Release](https://img.shields.io/github/v/release/sarmay/Ant-Browser?sort=semver)](https://github.com/sarmay/Ant-Browser/releases)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)](https://github.com/sarmay/Ant-Browser/releases)
+[![Issues](https://img.shields.io/github/issues/sarmay/Ant-Browser)](https://github.com/sarmay/Ant-Browser/issues)
 
 ## 推荐内核项目
 
@@ -51,8 +51,9 @@ Ant Browser 适合以下场景：
 
 ## 近期更新
 
-### 未发布
+### 1.5.1 · 2026-08-19
 
+- 指纹预设：快速生成补充多个 macOS 版本预设和高级画像，选中后下拉框保持显示当前选项
 - SOCKS5 优化：完善 SOCKS5 与链式代理连接流程，统一实例启动、测速和健康检测体验
 - 体验优化：优化代理池、实例列表、日志查看和异常提示等日常操作细节
 - 内存限制：新增实例最大内存配置，支持按实例控制浏览器内存占用
@@ -184,7 +185,7 @@ Ant Browser 适合以下场景：
 
 ### 下载与运行
 
-1. 前往 Releases 页面下载最新版本：<https://github.com/black-ant/Ant-Browser/releases>
+1. 前往 Releases 页面下载最新版本：<https://github.com/sarmay/Ant-Browser/releases>
 2. 安装版直接运行 `AntBrowser-Setup-*.exe`
 3. 便携版解压后运行 `ant-chrome.exe`
 4. Linux 包下载后可直接安装 `ant-browser_<version>_<arch>.deb`，或解压 `tar.gz` 后运行 `ant-chrome`
@@ -273,14 +274,23 @@ bash publish/linux/publish-linux.sh --arch arm64
 
 ### macOS unsigned 发布打包（源码）
 
-macOS 发布脚本位于 `publish/mac/`，必须在原生 macOS 主机上执行，且目标架构需与主机架构一致。
+在原生 macOS 上打包 `.app` 和 `.zip`。推荐直接使用仓库根目录脚本，默认跟随本机架构：
 
 ```bash
+chmod +x pack-mac.sh
+./pack-mac.sh
+./pack-mac.sh --open
+```
+
+也可以显式指定架构，或调用底层发布脚本：
+
+```bash
+./pack-mac.sh --arch arm64
 bash publish/mac/publish-mac.sh --arch amd64
 bash publish/mac/publish-mac.sh --arch arm64
 ```
 
-脚本会生成 unsigned `.app` 和 `.zip`，适合 PR 验证与内部测试。详细说明见 [publish/mac/README.md](publish/mac/README.md)。
+产物输出到 `publish/output/`。脚本会生成 ad-hoc 签名的 `.app` 和 `.zip`，适合 PR 验证与内部测试。详细说明见 [publish/mac/README.md](publish/mac/README.md)。
 
 ### 准备浏览器内核
 
@@ -357,8 +367,8 @@ chrome/
 
 ## 支持与反馈
 
-- Releases：<https://github.com/black-ant/Ant-Browser/releases>
-- Issues：<https://github.com/black-ant/Ant-Browser/issues>
+- Releases：<https://github.com/sarmay/Ant-Browser/releases>
+- Issues：<https://github.com/sarmay/Ant-Browser/issues>
 - 感谢以下社区的支持：<https://linux.do/>
 
 ## License

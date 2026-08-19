@@ -9,15 +9,19 @@ VERSION=""
 SKIP_BUILD=0
 SKIP_RUNTIME_VERIFY=0
 KEEP_STAGING=0
+OPEN_APP=0
+WAILS_CLI_VERSION="v2.12.0"
 
 usage() {
   cat <<'EOF'
 Usage:
-  publish/mac/publish-mac.sh --arch <arm64|amd64> [options]
+  publish/mac/publish-mac.sh [--arch <arm64|amd64>] [options]
+  ./pack-mac.sh [--arch <arm64|amd64>] [options]
 
 Options:
-  --arch <arm64|amd64>   Target architecture (required)
+  --arch <arm64|amd64>   Target architecture (default: current Mac)
   --version <ver>        Package version (default: read from wails.json)
+  --open                 Open the generated .app after packaging
   --skip-build           Skip frontend and Wails build steps
   --skip-runtime-verify  Skip runtime hash verification
   --keep-staging         Keep assembled .app bundle in publish/staging/mac
@@ -34,6 +38,10 @@ while [[ $# -gt 0 ]]; do
     --version)
       VERSION="${2:-}"
       shift 2
+      ;;
+    --open)
+      OPEN_APP=1
+      shift
       ;;
     --skip-build)
       SKIP_BUILD=1
@@ -59,17 +67,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$ARCH" ]]; then
-  echo "[ERROR] --arch is required" >&2
-  usage
-  exit 1
-fi
-
-if [[ "$ARCH" != "amd64" && "$ARCH" != "arm64" ]]; then
-  echo "[ERROR] unsupported arch: $ARCH (expected amd64 or arm64)" >&2
-  exit 1
-fi
-
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "[ERROR] this script must run on macOS host" >&2
   exit 1
@@ -85,10 +82,23 @@ case "$host_arch_raw" in
     ;;
 esac
 
+if [[ -z "$ARCH" ]]; then
+  ARCH="$HOST_ARCH"
+fi
+
+if [[ "$ARCH" != "amd64" && "$ARCH" != "arm64" ]]; then
+  echo "[ERROR] unsupported arch: $ARCH (expected amd64 or arm64)" >&2
+  exit 1
+fi
+
 if [[ "$HOST_ARCH" != "$ARCH" ]]; then
   echo "[ERROR] host arch is $HOST_ARCH but target arch is $ARCH." >&2
-  echo "        Build the first macOS package on a native runner for the same architecture." >&2
+  echo "        Build the macOS package on a native runner for the same architecture." >&2
   exit 1
+fi
+
+if [[ -z "${GOPROXY:-}" ]]; then
+  export GOPROXY="https://goproxy.cn,direct"
 fi
 
 require_cmd() {
@@ -98,10 +108,35 @@ require_cmd() {
   fi
 }
 
+prepend_path() {
+  local dir="$1"
+  if [[ -n "$dir" && -d "$dir" ]]; then
+    case ":$PATH:" in
+      *":$dir:"*) ;;
+      *) export PATH="$dir:$PATH" ;;
+    esac
+  fi
+}
+
+ensure_wails() {
+  prepend_path "$(go env GOPATH)/bin"
+  if command -v wails >/dev/null 2>&1; then
+    return
+  fi
+
+  echo "Wails CLI not found, installing github.com/wailsapp/wails/v2/cmd/wails@$WAILS_CLI_VERSION ..."
+  go install "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_CLI_VERSION"
+  prepend_path "$(go env GOPATH)/bin"
+  require_cmd wails
+}
+
 require_cmd python3
 require_cmd ditto
-require_cmd wails
+require_cmd go
+require_cmd node
+require_cmd npm
 require_cmd codesign
+ensure_wails
 
 if [[ -z "$VERSION" ]]; then
   VERSION="$(python3 - "$ROOT_DIR/wails.json" <<'PY'
@@ -231,12 +266,18 @@ if [[ ! -d "$APP_MACOS_DIR" ]]; then
   exit 1
 fi
 
+APP_BINARY="$APP_MACOS_DIR/ant-chrome"
+if [[ ! -f "$APP_BINARY" ]]; then
+  echo "[ERROR] missing app executable: $APP_BINARY" >&2
+  exit 1
+fi
+
 rm -rf "$APP_MACOS_DIR/bin"
 mkdir -p "$APP_MACOS_DIR/bin"
 cp "$XRAY_SRC" "$APP_MACOS_DIR/bin/xray"
 cp "$SINGBOX_SRC" "$APP_MACOS_DIR/bin/sing-box"
 cp "$CONFIG_INIT_SRC" "$APP_MACOS_DIR/config.yaml"
-chmod +x "$APP_MACOS_DIR/bin/xray" "$APP_MACOS_DIR/bin/sing-box"
+chmod +x "$APP_BINARY" "$APP_MACOS_DIR/bin/xray" "$APP_MACOS_DIR/bin/sing-box"
 
 if [[ -f "$CHROME_README_SRC" ]]; then
   mkdir -p "$APP_MACOS_DIR/chrome"
@@ -256,6 +297,11 @@ echo "  - $OUTPUT_DIR/$ZIP_NAME"
 
 if [[ "$KEEP_STAGING" -ne 1 ]]; then
   rm -rf "$APP_STAGE"
+fi
+
+if [[ "$OPEN_APP" -eq 1 ]]; then
+  echo "Opening $APP_EXPORT"
+  open "$APP_EXPORT"
 fi
 
 echo "Done."

@@ -141,8 +141,8 @@ APPSTREAM_ID="ant-browser"
 APP_NAME="Ant Browser"
 APP_SUMMARY="Multi-profile browser launcher with proxy-pool management"
 APP_MAINTAINER="Ant Chrome Team"
-APP_MAINTAINER_EMAIL="contact@antblack.dev"
-APP_HOMEPAGE="https://github.com/black-ant/Ant-Browser"
+APP_MAINTAINER_EMAIL="282387881@qq.com"
+APP_HOMEPAGE="https://github.com/sarmay/Ant-Browser"
 BUILD_DATE_UTC="$(date -u +%F)"
 ICON_SIZES=(16 24 32 48 64 128 256 512)
 

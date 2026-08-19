@@ -14,9 +14,19 @@ The goal is to turn the current codebase into a macOS build that can:
 
 ## Current Entry Command
 
-The initial internal-build script can be invoked on a real Mac with:
+On a real Mac, the recommended local command is:
 
 ```bash
+./pack-mac.sh
+./pack-mac.sh --open
+```
+
+The script auto-detects the current architecture, installs the Wails CLI if needed, and writes `.app` / `.zip` into `publish/output/`.
+
+The underlying publish script can still be invoked directly:
+
+```bash
+bash publish/mac/publish-mac.sh
 bash publish/mac/publish-mac.sh --arch arm64
 ```
 

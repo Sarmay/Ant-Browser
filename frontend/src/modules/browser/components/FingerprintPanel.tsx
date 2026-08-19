@@ -13,7 +13,7 @@ import {
   serialize,
   validateFingerprintArgs,
 } from '../utils/fingerprintSerializer'
-import { FINGERPRINT_CAPABILITIES, FINGERPRINT_PERSONAS, capabilityModeLabel } from '../utils/fingerprintCapabilities'
+import { FINGERPRINT_CAPABILITIES, FINGERPRINT_PERSONAS, PLATFORM_VERSION_OPTIONS, capabilityModeLabel } from '../utils/fingerprintCapabilities'
 
 interface FingerprintPanelProps {
   value: string[]
@@ -59,11 +59,6 @@ const BRAND_VERSION_OPTIONS = [
   { value: '144.0.7559.132', label: '144.0.7559.132' },
   { value: '143.0.7499.10', label: '143.0.7499.10' },
   { value: '148.0.7778.215', label: '148.0.7778.215' },
-]
-
-const PLATFORM_VERSION_OPTIONS = [
-  { value: '10.0.0', label: 'Windows 10 / 10.0.0' },
-  { value: '15.2.0', label: 'macOS 15.2 / 15.2.0' },
 ]
 
 const ACCEPT_LANG_OPTIONS = LANG_OPTIONS
@@ -188,14 +183,28 @@ function FingerprintSection({ title, children }: FingerprintSectionProps) {
 
 function EditableOptionInput({ value, onChange, options, placeholder }: EditableOptionInputProps) {
   const [open, setOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const matched = options.find(option => option.value === value)
+  const displayValue = !focused && matched ? matched.label : value
+
+  const selectOption = (nextValue: string) => {
+    onChange(nextValue)
+    setOpen(false)
+  }
 
   return (
     <div className="relative">
       <Input
-        value={value}
+        value={displayValue}
         onChange={e => onChange(e.target.value)}
-        onFocus={() => setOpen(true)}
-        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        onFocus={() => {
+          setFocused(true)
+          setOpen(true)
+        }}
+        onBlur={() => {
+          setFocused(false)
+          window.setTimeout(() => setOpen(false), 120)
+        }}
         placeholder={placeholder}
         className="pr-9"
       />
@@ -213,11 +222,10 @@ function EditableOptionInput({ value, onChange, options, placeholder }: Editable
             <button
               key={option.value}
               type="button"
-              className="block w-full px-3 py-2 text-left text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)]"
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => {
-                onChange(option.value)
-                setOpen(false)
+              className={`block w-full px-3 py-2 text-left text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)] ${option.value === value ? 'bg-[var(--color-bg-hover)]' : ''}`}
+              onMouseDown={e => {
+                e.preventDefault()
+                selectOption(option.value)
               }}
             >
               {option.label}
@@ -231,6 +239,8 @@ function EditableOptionInput({ value, onChange, options, placeholder }: Editable
 
 export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
   const [config, setConfig] = useState<FingerprintConfig>(() => deserialize(value))
+  const [selectedPresetId, setSelectedPresetId] = useState('')
+  const [selectedPersonaId, setSelectedPersonaId] = useState('')
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [advancedHelpOpen, setAdvancedHelpOpen] = useState(false)
   const [confirmSeedOpen, setConfirmSeedOpen] = useState(false)
@@ -247,6 +257,7 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
   }
 
   const handlePresetChange = (presetId: string) => {
+    setSelectedPresetId(presetId)
     if (!presetId) return
     const preset = FINGERPRINT_PRESETS.find(p => p.id === presetId)
     if (!preset) return
@@ -255,6 +266,7 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
       seed: randomFingerprintSeed(),
       unknownArgs: config.unknownArgs,
     }
+    setSelectedPersonaId('')
     setConfig(next)
     onChange(serialize(next))
   }
@@ -267,6 +279,7 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
   }
 
   const handlePersonaChange = (personaId: string) => {
+    setSelectedPersonaId(personaId)
     if (!personaId) return
     const persona = FINGERPRINT_PERSONAS.find(item => item.id === personaId)
     if (!persona) return
@@ -274,6 +287,7 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
       ...buildFingerprintConfigFromPersona(persona),
       unknownArgs: config.unknownArgs,
     }
+    setSelectedPresetId('')
     setConfig(next)
     onChange(serialize(next))
   }
@@ -382,11 +396,11 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
       <FingerprintSection title="快速生成">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="快速预设">
-            <Select value="" onChange={e => handlePresetChange(e.target.value)} options={PRESET_OPTIONS} />
+            <Select value={selectedPresetId} onChange={e => handlePresetChange(e.target.value)} options={PRESET_OPTIONS} />
           </FormItem>
 
           <FormItem label="高级画像">
-            <Select value="" onChange={e => handlePersonaChange(e.target.value)} options={PERSONA_OPTIONS} />
+            <Select value={selectedPersonaId} onChange={e => handlePersonaChange(e.target.value)} options={PERSONA_OPTIONS} />
           </FormItem>
         </div>
         <div className="flex justify-end">
