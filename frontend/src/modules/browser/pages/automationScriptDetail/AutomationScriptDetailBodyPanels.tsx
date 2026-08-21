@@ -2,8 +2,8 @@ import { ChevronDown, ChevronRight, Copy, Play, Settings } from "lucide-react";
 import {
   Badge,
   Button,
+  CodeEditor,
   FormItem,
-  Textarea,
 } from "../../../../shared/components";
 import type {
   AutomationScriptPublicAPIConfig,
@@ -279,20 +279,13 @@ export function AutomationScriptDetailBodyPanels({
             </div>
 
             <FormItem label="接口请求源配置 JSON">
-              <Textarea
-                rows={12}
+              <CodeEditor
                 value={draft.paramsText}
-                onChange={(event) =>
-                  onUpdateDraft({ paramsText: event.target.value })
-                }
-                className="font-mono"
-                placeholder={`{
-  "browsers": [
-    { "code": "BUYER_001", "skipDefaultStartUrls": true },
-    { "code": "BUYER_002", "skipDefaultStartUrls": true }
-  ],
-  "timeoutMs": 45000
-}`}
+                onChange={(value) => onUpdateDraft({ paramsText: value })}
+                language="json"
+                title="启动配置 JSON"
+                minHeight="260px"
+                placeholder={`{\n  "browsers": [\n    { "code": "BUYER_001", "skipDefaultStartUrls": true },\n    { "code": "BUYER_002", "skipDefaultStartUrls": true }\n  ],\n  "timeoutMs": 45000\n}`}
                 disabled={busy}
               />
             </FormItem>
@@ -337,14 +330,13 @@ export function AutomationScriptDetailBodyPanels({
                 )
               }
             >
-              <Textarea
-                rows={12}
+              <CodeEditor
                 value={draft.paramsText}
-                onChange={(event) =>
-                  onUpdateDraft({ paramsText: event.target.value })
-                }
-                className="font-mono"
-                placeholder='{"startUrls":["https://example.com"]}'
+                onChange={(value) => onUpdateDraft({ paramsText: value })}
+                language="json"
+                title={resolvedPublicAPI.enabled ? "接口参数 JSON" : "运行参数 JSON"}
+                minHeight="260px"
+                placeholder='{\n  "startUrls": [\n    "https://example.com"\n  ]\n}'
                 disabled={busy}
               />
             </FormItem>
@@ -367,18 +359,31 @@ export function AutomationScriptDetailBodyPanels({
           <div className="rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-bg-secondary)] px-3 py-3 text-sm text-[var(--color-text-secondary)]">
             固定接口模板由系统维护。
           </div>
+          {draft.scriptText ? (
+            <div className="mt-3">
+              <CodeEditor
+                value={draft.scriptText}
+                language="javascript"
+                readOnly
+                title="固定模板源码 (只读)"
+                minHeight="320px"
+              />
+            </div>
+          ) : null}
         </DetailPanel>
       ) : (
         <DetailPanel title="脚本">
           <FormItem label="脚本内容">
-            <Textarea
-              rows={24}
+            <CodeEditor
               value={draft.scriptText}
-              onChange={(event) =>
-                onUpdateDraft({ scriptText: event.target.value })
+              onChange={(value) =>
+                onUpdateDraft({ scriptText: value })
               }
-              className="min-h-[520px] font-mono leading-6"
-              placeholder="module.exports.run = async () => {}"
+              language="javascript"
+              title={draft.entryFile || "index.cjs"}
+              minHeight="520px"
+              placeholder="module.exports.run = async ({ page, params, context }) => {\n  // 在此编写自动化脚本逻辑\n}"
+              disabled={busy}
             />
           </FormItem>
         </DetailPanel>
