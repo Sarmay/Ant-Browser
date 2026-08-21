@@ -171,10 +171,175 @@ export function createWebImageGenerateDownloadScriptDraft(): AutomationScriptRec
   };
 }
 
+export function createProtonMailFirstMessageScriptDraft(): AutomationScriptRecord {
+  const createdAt = nowIso();
+
+  return {
+    packageFormat: AUTOMATION_SCRIPT_PACKAGE_FORMAT,
+    manifestVersion: AUTOMATION_SCRIPT_MANIFEST_VERSION,
+    id: "proton-mail-first-message",
+    name: "Proton 邮件搜索并读取最新邮件",
+    description:
+      "打开 Proton Inbox，用查询语句搜索邮件，再用发件邮箱和收件人约束结果，返回命中邮件的正文内容和验证码。",
+    type: "playwright-cdp",
+    status: "ready",
+    entryFile: "index.cjs",
+    tags: ["Playwright", "邮箱", "Proton", "邮件处理"],
+    selectorText: "",
+    paramsText: `{
+  "recipient": "",
+  "searchQuery": "OpenAI, ChatGPT",
+  "senderEmail": ""
+}`,
+    scriptText: BACKEND_BUILTIN_SCRIPT_PLACEHOLDER,
+    notes:
+      "searchQuery 只写入 Proton 搜索框；senderEmail 作为高级搜索约束，recipient 留空也可直接跑。若同一邮箱里 OpenAI / ChatGPT 邮件较多，再补 recipient 缩小范围。旧字段 recipientQuery 仍兼容。",
+    targetConfig: normalizeAutomationScriptTargetConfig(null),
+    publicAPI: {
+      ...createAutomationScriptPublicAPIConfig(),
+      enabled: true,
+      path: "mail/proton-first-message",
+      requestMode: "params-only",
+      responseMode: "envelope",
+      timeoutMs: 120000,
+    },
+    source: {
+      type: "builtin",
+      uri: "repo://backend/internal/automation/demo-library/proton-mail-first-message",
+      ref: "HEAD",
+      path: "proton-mail-first-message",
+      importedAt: "",
+    },
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
+export function createLianjiaWHHomeStep1ScriptDraft(): AutomationScriptRecord {
+  const createdAt = nowIso();
+
+  return {
+    packageFormat: AUTOMATION_SCRIPT_PACKAGE_FORMAT,
+    manifestVersion: AUTOMATION_SCRIPT_MANIFEST_VERSION,
+    id: "lianjia-wh-home-step1",
+    name: "链家武汉首页 S1 打开页面",
+    description:
+      "S1：启动目标浏览器实例并进入 https://wh.lianjia.com/，检测是否出现验证页，并导出当前链家 Cookie 供后续爬取链路使用。",
+    type: "playwright-cdp",
+    status: "ready",
+    entryFile: "index.cjs",
+    tags: ["Playwright", "链家", "武汉", "S1"],
+    selectorText: "",
+    paramsText: `{
+  "targetUrl": "https://wh.lianjia.com/",
+  "timeoutMs": 60000,
+  "waitAfterLoadMs": 2500,
+  "captureScreenshot": true,
+  "keepOpen": true
+}`,
+    scriptText: BACKEND_BUILTIN_SCRIPT_PLACEHOLDER,
+    notes:
+      "脚本只做 S1 进入页面和状态采集，不绕过验证码，不抓取成交数据。若检测到 CAPTCHA，请在打开的浏览器实例里人工完成验证，再执行后续脚本或复制导出的 Cookie。",
+    targetConfig: normalizeAutomationScriptTargetConfig(null),
+    publicAPI: createAutomationScriptPublicAPIConfig(),
+    source: {
+      type: "builtin",
+      uri: "repo://backend/internal/automation/demo-library/lianjia-wh-home-step1",
+      ref: "HEAD",
+      path: "lianjia-wh-home-step1",
+      importedAt: "",
+    },
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
+export function createLianjiaWHCookiePrepareScriptDraft(): AutomationScriptRecord {
+  const createdAt = nowIso();
+
+  return {
+    packageFormat: AUTOMATION_SCRIPT_PACKAGE_FORMAT,
+    manifestVersion: AUTOMATION_SCRIPT_MANIFEST_VERSION,
+    id: "lianjia-wh-cookie-prepare",
+    name: "链家武汉 Cookie 准备",
+    description:
+      "打开链家武汉首页，检测验证状态并导出当前 Cookie 供后续链家成交脚本使用。",
+    type: "playwright-cdp",
+    status: "ready",
+    entryFile: "index.cjs",
+    tags: ["Playwright", "链家", "武汉", "Cookie"],
+    selectorText: "",
+    paramsText: `{
+  "targetUrl": "https://wh.lianjia.com/",
+  "timeoutMs": 60000,
+  "waitAfterLoadMs": 2500,
+  "captureScreenshot": true,
+  "keepOpen": true
+}`,
+    scriptText: BACKEND_BUILTIN_SCRIPT_PLACEHOLDER,
+    notes:
+      "脚本只做 Cookie 准备，不绕过验证码，不抓取成交数据。若检测到 CAPTCHA，请在打开的浏览器实例里人工完成验证，再执行后续脚本或复制导出的 Cookie。",
+    targetConfig: normalizeAutomationScriptTargetConfig(null),
+    publicAPI: createAutomationScriptPublicAPIConfig(),
+    source: {
+      type: "builtin",
+      uri: "repo://backend/internal/automation/demo-library/lianjia-wh-cookie-prepare",
+      ref: "HEAD",
+      path: "lianjia-wh-cookie-prepare",
+      importedAt: "",
+    },
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
+export function createBeikeHousePriceExtractScriptDraft(): AutomationScriptRecord {
+  const createdAt = nowIso();
+
+  return {
+    packageFormat: AUTOMATION_SCRIPT_PACKAGE_FORMAT,
+    manifestVersion: AUTOMATION_SCRIPT_MANIFEST_VERSION,
+    id: "beike-house-price-extract",
+    name: "贝壳二手房价格提取",
+    description:
+      "打开贝壳二手房详情页，提取页面真实 DOM 中的总价和单价，并导出结构化记录。",
+    type: "playwright-cdp",
+    status: "ready",
+    entryFile: "index.cjs",
+    tags: ["Playwright", "贝壳", "二手房", "价格提取"],
+    selectorText: "",
+    paramsText: `{
+  "targetUrl": "https://wx.ke.com/ershoufang/103147107668.html",
+  "timeoutMs": 60000,
+  "waitAfterLoadMs": 2500,
+  "captureScreenshot": true,
+  "keepOpen": true
+}`,
+    scriptText: BACKEND_BUILTIN_SCRIPT_PLACEHOLDER,
+    notes:
+      "脚本只读取页面真实内容，不填充 mock 或假设值。若未提取到总价或单价，会在 missingFields 中明确记录缺失字段。",
+    targetConfig: normalizeAutomationScriptTargetConfig(null),
+    publicAPI: createAutomationScriptPublicAPIConfig(),
+    source: {
+      type: "builtin",
+      uri: "repo://backend/internal/automation/demo-library/beike-house-price-extract",
+      ref: "HEAD",
+      path: "beike-house-price-extract",
+      importedAt: "",
+    },
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
 export function buildDefaultAutomationScripts(): AutomationScriptRecord[] {
   return [
-    createNewsTxtScriptDraft(),
     createDualInstanceRuntimeScriptDraft(),
+    createNewsTxtScriptDraft(),
+    createProtonMailFirstMessageScriptDraft(),
     createWebImageGenerateDownloadScriptDraft(),
+    createLianjiaWHHomeStep1ScriptDraft(),
+    createLianjiaWHCookiePrepareScriptDraft(),
+    createBeikeHousePriceExtractScriptDraft(),
   ];
 }
