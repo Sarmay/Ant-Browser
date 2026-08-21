@@ -10,6 +10,7 @@ import {
   DOC_TUTORIAL,
 } from './contentIntro'
 import { DOC_CHANGELOG } from './contentChangelog'
+import { DOC_SCRIPT_DEV } from './contentScriptDev'
 import {
   DOC_API_AUTOMATION,
   DOC_API_PROFILES_LAUNCH,
@@ -50,6 +51,12 @@ export const DOC_GROUPS: LaunchDocGroup[] = [
         label: '基础使用',
         summary: '应用上手流程、菜单入口和最小接口链路。',
         content: DOC_TUTORIAL,
+      },
+      {
+        id: 'tutorial-script-dev',
+        label: '内置脚本开发',
+        summary: '自动化脚本包结构、Runner 上下文与核心 API 参考。',
+        content: DOC_SCRIPT_DEV,
       },
       {
         id: 'tutorial-skill',

@@ -69,7 +69,7 @@ export function Sidebar() {
         )}
       >
         {!sidebarCollapsed ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 bg-[var(--color-accent)] flex items-center justify-center">
               <img
                 src={logoImage}
@@ -88,9 +88,17 @@ export function Sidebar() {
             <h2 className="text-base font-semibold text-[var(--color-text-primary)] tracking-tight truncate">
               {projectConfig.name}
             </h2>
+            {projectConfig.version && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--color-accent-muted)] text-[var(--color-accent)] shrink-0 select-none">
+                v{projectConfig.version}
+              </span>
+            )}
           </div>
         ) : (
-          <div className="w-8 h-8 rounded-full overflow-hidden bg-[var(--color-accent)] flex items-center justify-center">
+          <div
+            className="w-8 h-8 rounded-full overflow-hidden bg-[var(--color-accent)] flex items-center justify-center"
+            title={projectConfig.version ? `${projectConfig.name} v${projectConfig.version}` : projectConfig.name}
+          >
             <img
               src={logoImage}
               alt="应用Logo"
@@ -107,6 +115,7 @@ export function Sidebar() {
           </div>
         )}
       </div>
+
 
       {/* Navigation */}
       <nav className="flex-1 py-4 px-3 space-y-6 overflow-y-auto">

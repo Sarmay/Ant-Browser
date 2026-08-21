@@ -1,8 +1,10 @@
-﻿import { useState, useRef, useEffect } from 'react'
-import { Bell, User, Settings, Check, Trash2, Info, AlertCircle, CheckCircle } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Bell, User, Settings, Check, Trash2, Info, AlertCircle, CheckCircle, BookOpen } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import { useNotificationStore, type Notification } from '../../store/notificationStore'
+import { BrowserOpenURL } from '../../wailsjs/runtime/runtime'
+import { DEFAULT_DOCS_URL } from '../../config/links'
 
 function NotificationDropdown({
   notifications,
@@ -134,6 +136,18 @@ export function Topbar() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const handleOpenDocs = () => {
+    const targetUrl = DEFAULT_DOCS_URL
+    const wailsRuntime = (window as Window & {
+      runtime?: { BrowserOpenURL?: (url: string) => void }
+    }).runtime
+    if (typeof wailsRuntime?.BrowserOpenURL === 'function') {
+      BrowserOpenURL(targetUrl)
+    } else {
+      window.open(targetUrl, '_blank', 'noopener,noreferrer')
+    }
+  }
+
   return (
     <header className="h-14 bg-[var(--color-bg-surface)] border-b border-[var(--color-border-default)] px-4 flex items-center justify-between gap-4">
       <div className="flex-1" />
@@ -172,6 +186,17 @@ export function Topbar() {
             />
           )}
         </div>
+
+        {/* 默认浏览器打开文档 */}
+        <button
+          type="button"
+          onClick={handleOpenDocs}
+          className="w-8 h-8 flex items-center justify-center text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-accent-muted)] rounded-md transition-colors duration-150"
+          title="打开文档 (默认浏览器)"
+          aria-label="打开文档"
+        >
+          <BookOpen className="w-4 h-4" />
+        </button>
 
         <Link
           to="/settings"

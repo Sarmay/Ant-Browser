@@ -5,3 +5,4 @@
 - 每个脚本一个独立目录，可直接整体复制到别的脚本库里使用
 - 运行时 / 用户自定义脚本不放这里
 - 运行时脚本统一落到 `data/automation/scripts`，并由 `.gitignore` 忽略
+- 编写与扩展脚本请参考完整开发手册：[docs/automation-script-guide.zh-CN.md](../../../../docs/automation-script-guide.zh-CN.md)
