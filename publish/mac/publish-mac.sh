@@ -164,7 +164,7 @@ CONFIG_INIT_SRC="$ROOT_DIR/publish/config.init.mac.yaml"
 ZIP_NAME="AntBrowser-${VERSION}-macos-${ARCH}.zip"
 APP_EXPORT="$OUTPUT_DIR/AntBrowser-${VERSION}-macos-${ARCH}.app"
 STAGE_DIR="$STAGING_ROOT/$TARGET"
-APP_STAGE="$STAGE_DIR/Ant Browser.app"
+APP_STAGE="$STAGE_DIR/AntBrowser.app"
 
 find_built_app_bundle() {
   python3 - "$APP_BIN_DIR" <<'PY'
