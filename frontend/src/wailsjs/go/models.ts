@@ -243,6 +243,7 @@ export namespace automation {
 	}
 	export class ScriptRunRequest {
 	    scriptId: string;
+	    runId?: string;
 	    selectorText: string;
 	    targetMode?: string;
 	    targetInput?: any;
@@ -258,6 +259,7 @@ export namespace automation {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.scriptId = source["scriptId"];
+	        this.runId = source["runId"];
 	        this.selectorText = source["selectorText"];
 	        this.targetMode = source["targetMode"];
 	        this.targetInput = source["targetInput"];
@@ -1435,6 +1437,8 @@ export namespace browser {
 	export class ProfileCopyOptions {
 	    mode: string;
 	    automationTargets: string[];
+	    proxyId: string;
+	    proxyConfig: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProfileCopyOptions(source);
@@ -1444,6 +1448,8 @@ export namespace browser {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
 	        this.automationTargets = source["automationTargets"];
+	        this.proxyId = source["proxyId"];
+	        this.proxyConfig = source["proxyConfig"];
 	    }
 	}
 	export class ProfileExtensionSettings {
@@ -1692,6 +1698,34 @@ export namespace config {
 
 export namespace launchcode {
 	
+	export class CookieRecord {
+	    name: string;
+	    value: string;
+	    domain?: string;
+	    path?: string;
+	    expires?: number;
+	    httpOnly?: boolean;
+	    secure?: boolean;
+	    sameSite?: string;
+	    url?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CookieRecord(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.value = source["value"];
+	        this.domain = source["domain"];
+	        this.path = source["path"];
+	        this.expires = source["expires"];
+	        this.httpOnly = source["httpOnly"];
+	        this.secure = source["secure"];
+	        this.sameSite = source["sameSite"];
+	        this.url = source["url"];
+	    }
+	}
 	export class LaunchRequestParams {
 	    launchArgs: string[];
 	    startUrls: string[];

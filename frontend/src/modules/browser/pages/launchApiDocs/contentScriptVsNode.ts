@@ -20,7 +20,7 @@ Ant Browser 内置脚本（执行）
 
 | 能力 | 内置 \`playwright-cdp\` 脚本 | 外部 Node \`connectOverCDP\` |
 |------|-----------------------------|------------------------------|
-| 复制主实例 | \`targetConfig.mode = "create"\` 直接 \`Copy()\` | HTTP 没有 copy 接口，要自己拼 \`POST /api/profiles\` |
+| 复制主实例 | \`targetConfig.mode = "create"\` 直接 \`Copy()\` | \`POST /api/profiles/{profileId}/copy\` |
 | 指纹 / 代理 | 启动链路已带上 | 必须走 \`/api/launch\` 或 \`/api/runtime/session\`，不能自己 \`chromium.launch()\` |
 | 打开页面 | \`useBrowser\` / \`openPage\` | 自己处理空白页、前台、权限 |
 | 站内带 Cookie 请求 | \`browserFetch\` | 自己在 page 里 \`evaluate(fetch)\` |

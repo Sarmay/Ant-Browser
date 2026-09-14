@@ -62,7 +62,7 @@ my-script/
 }
 \`\`\`
 
-默认名称模板是 \`\${templateName}-\${timestamp}\`。\`create\` 走应用内 \`Copy()\`：拷配置、换新用户数据目录、指纹改用全局默认值。详情见「复制实例」。
+默认名称模板是 \`\${templateName}-\${timestamp}\`。\`create\` 走应用内 \`Copy()\`：拷配置、换新用户数据目录、指纹改用全局默认值。只复制实例、不跑脚本时用 \`POST /api/profiles/{profileId}/copy\`。详情见「复制实例」。
 
 ---
 

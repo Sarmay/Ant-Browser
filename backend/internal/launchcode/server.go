@@ -61,6 +61,22 @@ type BrowserStopper interface {
 	StopInstance(profileId string) (*browser.Profile, error)
 }
 
+// BrowserRestarter 可选接口：支持重启实例。
+type BrowserRestarter interface {
+	RestartInstance(profileId string) (*browser.Profile, error)
+}
+
+// BrowserURLOpener 可选接口：在运行中的实例打开网址。
+type BrowserURLOpener interface {
+	OpenInstanceURL(profileId string, targetURL string) (bool, error)
+}
+
+// BrowserCookieManager 可选接口：通过 CDP 读写运行中实例的 Cookie。
+type BrowserCookieManager interface {
+	ListInstanceCookies(profileId string) ([]CookieRecord, error)
+	ImportInstanceCookies(profileId string, cookies []CookieRecord) (int, error)
+}
+
 // BrowserDebugWaiter 可选接口：等待实例调试端口进入可接管状态。
 type BrowserDebugWaiter interface {
 	WaitInstanceDebugReady(profileId string, debugPort int, timeout time.Duration) (*browser.Profile, bool, error)
@@ -84,6 +100,16 @@ type AutomationScriptRunner interface {
 // AutomationScriptRunLister 可选接口：提供自动化脚本运行记录。
 type AutomationScriptRunLister interface {
 	AutomationScriptRunList(limit int) ([]automation.ScriptRunRecord, error)
+}
+
+// AutomationScriptRunGetter 可选接口：按 ID 查询单次脚本运行记录。
+type AutomationScriptRunGetter interface {
+	AutomationScriptRunGet(runID string) (*automation.ScriptRunRecord, error)
+}
+
+// AutomationScriptRunStarter 可选接口：异步启动脚本执行并立即返回 running 记录。
+type AutomationScriptRunStarter interface {
+	AutomationScriptStartRun(input automation.ScriptRunRequest) (*automation.ScriptRunRecord, error)
 }
 
 // LaunchCallRecord 接口调用记录

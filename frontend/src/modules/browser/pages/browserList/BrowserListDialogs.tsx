@@ -151,6 +151,7 @@ export function BrowserListDialogs({
       >
         <BrowserProfileCopyForm
           sourceName={copyModal.profile?.profileName}
+          sourceProfile={copyModal.profile}
           copyName={copyName}
           copyOptions={copyOptions}
           onCopyNameChange={onCopyNameChange}

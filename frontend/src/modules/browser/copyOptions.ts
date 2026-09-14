@@ -46,6 +46,8 @@ export function createBrowserProfileCopyOptions(
   return {
     mode,
     automationTargets: dedupeAutomationTargets(automationTargets),
+    proxyId: '',
+    proxyConfig: '',
   }
 }
 

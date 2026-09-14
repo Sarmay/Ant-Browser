@@ -140,7 +140,7 @@ export const PROFILE_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
       'start 仅在 autoLaunch=true 时生效；成功响应的 profile 是完整实例快照。',
       'profile.proxyId 与 profile.proxyConfig 同时传时，优先使用 proxyId 对应的代理池节点。',
       '若 proxyId 无效：提供 proxyConfig 则按自定义代理保存；未提供 proxyConfig 则返回 400。',
-      '没有 copy 接口。从主实例开新号请用应用内复制、脚本 targetConfig.mode=create，或本接口创建时省略 fingerprintArgs（使用全局默认指纹）。不要把源实例的 --fingerprint= 原样写回来。',
+      '从主实例开新号请用 POST /api/profiles/{profileId}/copy。本接口创建空白实例时，省略 fingerprintArgs 会使用全局默认指纹；不要把源实例的 --fingerprint= 原样写回来。',
     ],
   },
   {
@@ -290,6 +290,148 @@ export const PROFILE_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
     ],
   },
   {
+    id: 'api-profiles-copy-detail',
+    parentId: 'api-profiles-launch',
+    label: '复制实例',
+    method: 'POST',
+    path: '/api/profiles/{profileId}/copy',
+    purpose: '从已有实例复制配置，生成新实例。',
+    description: '走应用内 CopyWithOptions：拷内核、代理、分组、标签、关键字、启动参数和会话恢复设置；新实例使用新的 profileId / userDataDir / launchCode。默认 auto_fingerprint 只重生成指纹种子。不复制 Cookie、登录态和用户数据目录。',
+    fields: [
+      ...API_AUTH_HEADER_FIELDS,
+      { name: 'profileId', type: 'string', required: true, location: 'Path', description: '源实例 ID。' },
+      { name: 'profileName', type: 'string', required: false, location: 'Body', description: '新实例名称；留空或省略时自动生成「源名称（副本）时间戳」。' },
+      { name: 'mode', type: 'auto_fingerprint | regular', required: false, location: 'Body', description: '指纹复制模式。默认 auto_fingerprint：保留源实例指纹模板，只重生成勾选的项。regular：指纹参数原样保留。' },
+      { name: 'automationTargets', type: 'string[]', required: false, location: 'Body', description: 'auto_fingerprint 时要重生成的指纹项。默认 ["seed"]。可选 seed / identity / locale / screen / hardware / network；旧别名 render / fonts / devices 会映射到 seed。mode=regular 时忽略。' },
+      { name: 'launchCode', type: 'string', required: false, location: 'Body', description: '指定新实例 launchCode；自动 trim 并转大写，须为 4–32 位且仅含 A-Z、0-9、_、-；留空或省略时自动生成。' },
+      { name: 'proxyId', type: 'string', required: false, location: 'Body', description: '覆盖新实例代理池节点。省略时跟随源实例。' },
+      { name: 'proxyConfig', type: 'string', required: false, location: 'Body', description: '覆盖新实例自定义代理。proxyId 有效时优先使用代理池节点。' },
+      { name: 'autoLaunch', type: 'boolean', required: false, location: 'Body', description: '是否在复制后立即启动新实例。' },
+      { name: 'start', type: 'object', required: false, location: 'Body', description: '仅本次自动启动时附加的启动参数。' },
+      ...PROFILE_START_FIELD_DOCS,
+    ],
+    requestExample: {
+      language: 'bash',
+      code: ({ launchBaseUrl, authHeader }) => `curl -X POST ${launchBaseUrl}/api/profiles/550e8400-e29b-41d4-a716-446655440000/copy \\
+  -H "Content-Type: application/json" \\
+  -H "${authHeader}: <your-api-key>" \\
+  -d '{
+    "profileName": "task-001",
+    "mode": "auto_fingerprint",
+    "automationTargets": ["seed"],
+    "proxyId": "proxy-us",
+    "autoLaunch": true,
+    "start": {
+      "skipDefaultStartUrls": true
+    }
+  }'`,
+    },
+    responseExample: {
+      language: 'json',
+      code: () => `{
+  "ok": true,
+  "created": true,
+  "updated": false,
+  "copied": true,
+  "launched": false,
+  "profileId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "profileName": "task-001",
+  "launchCode": "TASK_001",
+  "sourceProfileId": "550e8400-e29b-41d4-a716-446655440000",
+  "profile": {
+    "profileId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "profileName": "task-001",
+    "userDataDir": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "keywords": ["main"],
+    "proxyId": "proxy-us"
+  }
+}`,
+    },
+    responseCodes: [
+      { code: '201', description: '实例复制成功。' },
+      { code: '400', description: '请求体非法、mode 不受支持，或 automationTargets 非法。' },
+      ...COMMON_API_RESPONSE_CODES,
+      { code: '404', description: '源实例不存在。' },
+      { code: '409', description: 'launchCode 冲突或实例数超限。' },
+      { code: '500', description: '实例复制失败，或实例已复制但自动启动失败。' },
+      { code: '503', description: '实例目录或 launchCode 服务当前不可用。' },
+    ],
+    notes: [
+      '请求体可省略；空 body 或 {} 使用默认名称和 auto_fingerprint。请求体最大 1 MiB，未知 JSON 字段会被拒绝。',
+      '默认只重生成指纹种子。多号隔离不要用 mode=regular，否则会和源实例共用同一套指纹。',
+      '复制只拷配置，不拷 Cookie 和用户数据目录。要带走登录态用导出 ZIP。',
+      '脚本 targetConfig.mode=create 仍走 Copy()：指纹参数整份替换成全局默认，不是本接口的 auto_fingerprint。',
+      'autoLaunch=true 时，响应会附带启动结果字段。start 仅在 autoLaunch=true 时生效。',
+      'proxyId / proxyConfig 都省略时跟随源实例代理。自定义代理只传 proxyConfig。无效 proxyId 且未提供 proxyConfig 会 400。',
+      '只有 launchCode 时用 POST /api/profiles/copy，在 selector.code 里指定源实例。',
+    ],
+  },
+  {
+    id: 'api-profiles-copy-selector-detail',
+    parentId: 'api-profiles-launch',
+    label: '按 selector 复制',
+    method: 'POST',
+    path: '/api/profiles/copy',
+    purpose: '按 selector 或 launchCode 复制实例，不必先查 profileId。',
+    description: '与 POST /api/profiles/{profileId}/copy 同一套 CopyWithOptions。selector 只支持 unique / first，不支持 matchMode=all。profileName 是新实例名称，源实例名称放在 selector.profileName。',
+    fields: [
+      ...API_AUTH_HEADER_FIELDS,
+      { name: 'selector', type: 'object', required: false, location: 'Body', description: '源实例选择条件；与 code / profileId 至少提供一组。' },
+      ...createLaunchSelectorFieldDocs(
+        'selector',
+        'unique | first',
+        '匹配策略；省略时按 runtime 规则默认为 unique。不支持 all。',
+      ),
+      { name: 'code', type: 'string', required: false, location: 'Body', description: '兼容写法：等价于 selector.code。' },
+      { name: 'profileId', type: 'string', required: false, location: 'Body', description: '兼容写法：源实例 ID，等价于 selector.profileId。' },
+      { name: 'profileName', type: 'string', required: false, location: 'Body', description: '新实例名称，不是源实例名称。' },
+      { name: 'mode', type: 'auto_fingerprint | regular', required: false, location: 'Body', description: '指纹复制模式，默认 auto_fingerprint。' },
+      { name: 'automationTargets', type: 'string[]', required: false, location: 'Body', description: 'auto_fingerprint 时要重生成的指纹项，默认 ["seed"]。' },
+      { name: 'proxyId', type: 'string', required: false, location: 'Body', description: '覆盖新实例代理池节点。' },
+      { name: 'proxyConfig', type: 'string', required: false, location: 'Body', description: '覆盖新实例自定义代理。' },
+      { name: 'launchCode', type: 'string', required: false, location: 'Body', description: '指定新实例 launchCode。' },
+      { name: 'autoLaunch', type: 'boolean', required: false, location: 'Body', description: '是否在复制后立即启动。' },
+      { name: 'start', type: 'object', required: false, location: 'Body', description: '仅本次自动启动时附加的启动参数。' },
+      ...PROFILE_START_FIELD_DOCS,
+    ],
+    requestExample: {
+      language: 'bash',
+      code: ({ launchBaseUrl, authHeader }) => `curl -X POST ${launchBaseUrl}/api/profiles/copy \\
+  -H "Content-Type: application/json" \\
+  -H "${authHeader}: <your-api-key>" \\
+  -d '{
+    "selector": { "code": "MAIN_001" },
+    "profileName": "task-001",
+    "proxyConfig": "http://127.0.0.1:7890"
+  }'`,
+    },
+    responseExample: {
+      language: 'json',
+      code: () => `{
+  "ok": true,
+  "copied": true,
+  "created": true,
+  "profileId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "profileName": "task-001",
+  "sourceProfileId": "550e8400-e29b-41d4-a716-446655440000",
+  "launchCode": "TASK_001"
+}`,
+    },
+    responseCodes: [
+      { code: '201', description: '实例复制成功。' },
+      { code: '400', description: 'selector 缺失、matchMode=all，或代理参数非法。' },
+      ...COMMON_API_RESPONSE_CODES,
+      { code: '404', description: 'selector 未命中源实例。' },
+      { code: '409', description: 'selector 命中多个实例，或 launchCode 冲突。' },
+      { code: '500', description: '复制失败，或已复制但自动启动失败。' },
+      { code: '503', description: '实例目录当前不可用。' },
+    ],
+    notes: [
+      'selector 与顶层 code / profileId 至少要能唯一命中一个源实例。',
+      '顶层 profileName 永远是新实例名称；源实例名称只用 selector.profileName。',
+    ],
+  },
+  {
     id: 'api-profiles-status-detail',
     parentId: 'api-profiles-launch',
     label: '实例状态',
@@ -385,6 +527,185 @@ export const PROFILE_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
     ],
     notes: [
       '响应使用统一运行态结构，并附带停止后的完整 profile 快照。',
+    ],
+  },
+  {
+    id: 'api-profiles-restart-detail',
+    parentId: 'api-profiles-launch',
+    label: '重启实例',
+    method: 'POST',
+    path: '/api/profiles/{profileId}/restart',
+    purpose: '停止后立即重新启动指定实例。',
+    description: '等价于 stop 再 start，但作为一次调用，避免中间状态被外部编排拆开。成功后如果 debugReady，会切到统一 CDP 入口。',
+    fields: [
+      ...API_AUTH_HEADER_FIELDS,
+      { name: 'profileId', type: 'string', required: true, location: 'Path', description: '实例 ID。' },
+    ],
+    requestExample: {
+      language: 'bash',
+      code: ({ launchBaseUrl, authHeader }) => `curl -X POST ${launchBaseUrl}/api/profiles/550e8400-e29b-41d4-a716-446655440000/restart \\
+  -H "${authHeader}: <your-api-key>"`,
+    },
+    responseExample: {
+      language: 'json',
+      code: () => `{
+  "ok": true,
+  "restarted": true,
+  "profileId": "550e8400-e29b-41d4-a716-446655440000",
+  "running": true,
+  "debugReady": true,
+  "cdpUrl": "http://127.0.0.1:19876"
+}`,
+    },
+    responseCodes: [
+      { code: '200', description: '重启成功。' },
+      ...COMMON_API_RESPONSE_CODES,
+      { code: '404', description: '实例不存在。' },
+      { code: '500', description: '停止或启动失败。' },
+      { code: '503', description: '当前环境不支持运行态控制。' },
+    ],
+    notes: [
+      '实例本来没运行时，效果接近直接启动。',
+    ],
+  },
+  {
+    id: 'api-profiles-open-url-detail',
+    parentId: 'api-profiles-launch',
+    label: '打开页面',
+    method: 'POST',
+    path: '/api/profiles/{profileId}/open-url',
+    purpose: '在已经运行的实例里打开一个网址。',
+    description: '不启动新实例。优先走 CDP 打开新标签，失败时回退到浏览器进程唤起。实例必须已经 running。',
+    fields: [
+      ...API_AUTH_HEADER_FIELDS,
+      { name: 'profileId', type: 'string', required: true, location: 'Path', description: '实例 ID。' },
+      { name: 'url', type: 'string', required: true, location: 'Body', description: '要打开的网址。' },
+    ],
+    requestExample: {
+      language: 'bash',
+      code: ({ launchBaseUrl, authHeader }) => `curl -X POST ${launchBaseUrl}/api/profiles/550e8400-e29b-41d4-a716-446655440000/open-url \\
+  -H "Content-Type: application/json" \\
+  -H "${authHeader}: <your-api-key>" \\
+  -d '{ "url": "https://example.com" }'`,
+    },
+    responseExample: {
+      language: 'json',
+      code: () => `{
+  "ok": true,
+  "opened": true,
+  "url": "https://example.com",
+  "profileId": "550e8400-e29b-41d4-a716-446655440000",
+  "running": true,
+  "debugReady": true
+}`,
+    },
+    responseCodes: [
+      { code: '200', description: '已打开页面。' },
+      { code: '400', description: 'url 缺失或请求体非法。' },
+      ...COMMON_API_RESPONSE_CODES,
+      { code: '404', description: '实例不存在。' },
+      { code: '409', description: '实例未运行或调试接口未就绪。' },
+      { code: '500', description: '打开页面失败。' },
+      { code: '503', description: '当前环境不支持运行态控制。' },
+    ],
+    notes: [
+      '启动时打开页面请用 launch / runtime/session 的 startUrls。这个接口只服务已经在跑的实例。',
+    ],
+  },
+  {
+    id: 'api-profiles-cookies-get-detail',
+    parentId: 'api-profiles-launch',
+    label: '导出 Cookie',
+    method: 'GET',
+    path: '/api/profiles/{profileId}/cookies',
+    purpose: '导出运行中实例的 Cookie。',
+    description: '通过 CDP 读取当前浏览器 Cookie。默认返回 JSON，同时带 Netscape 文本。format=netscape 时直接返回文本。',
+    fields: [
+      ...API_AUTH_HEADER_FIELDS,
+      { name: 'profileId', type: 'string', required: true, location: 'Path', description: '实例 ID。' },
+      { name: 'format', type: 'json | netscape', required: false, location: 'Query', description: 'netscape 时返回 text/plain。' },
+    ],
+    requestExample: {
+      language: 'bash',
+      code: ({ launchBaseUrl, authHeader }) => `curl ${launchBaseUrl}/api/profiles/550e8400-e29b-41d4-a716-446655440000/cookies \\
+  -H "${authHeader}: <your-api-key>"`,
+    },
+    responseExample: {
+      language: 'json',
+      code: () => `{
+  "ok": true,
+  "profileId": "550e8400-e29b-41d4-a716-446655440000",
+  "count": 1,
+  "cookies": [
+    {
+      "name": "session",
+      "value": "abc123",
+      "domain": ".example.com",
+      "path": "/",
+      "secure": true
+    }
+  ],
+  "netscape": "# Netscape HTTP Cookie File\\n..."
+}`,
+    },
+    responseCodes: [
+      { code: '200', description: '返回 Cookie。' },
+      ...COMMON_API_RESPONSE_CODES,
+      { code: '404', description: '实例不存在。' },
+      { code: '409', description: '实例未运行或调试接口未就绪。' },
+      { code: '503', description: 'Cookie 能力当前不可用。' },
+    ],
+    notes: [
+      '实例必须 running 且 debugReady。',
+      'Cookie 含登录态，只建议本机调用。',
+    ],
+  },
+  {
+    id: 'api-profiles-cookies-put-detail',
+    parentId: 'api-profiles-launch',
+    label: '导入 Cookie',
+    method: 'PUT',
+    path: '/api/profiles/{profileId}/cookies',
+    purpose: '向运行中实例写入 Cookie。',
+    description: '通过 CDP Network.setCookies 导入。可传 JSON cookies 数组，或 Netscape 文本。JSON 优先。',
+    fields: [
+      ...API_AUTH_HEADER_FIELDS,
+      { name: 'profileId', type: 'string', required: true, location: 'Path', description: '实例 ID。' },
+      { name: 'cookies', type: 'object[]', required: false, location: 'Body', description: 'Cookie 对象数组；与 netscape 至少提供一个。' },
+      { name: 'netscape', type: 'string', required: false, location: 'Body', description: 'Netscape HTTP Cookie File 文本。' },
+    ],
+    requestExample: {
+      language: 'bash',
+      code: ({ launchBaseUrl, authHeader }) => `curl -X PUT ${launchBaseUrl}/api/profiles/550e8400-e29b-41d4-a716-446655440000/cookies \\
+  -H "Content-Type: application/json" \\
+  -H "${authHeader}: <your-api-key>" \\
+  -d '{
+    "cookies": [
+      { "name": "session", "value": "abc123", "domain": ".example.com", "path": "/" }
+    ]
+  }'`,
+    },
+    responseExample: {
+      language: 'json',
+      code: () => `{
+  "ok": true,
+  "imported": true,
+  "profileId": "550e8400-e29b-41d4-a716-446655440000",
+  "count": 1
+}`,
+    },
+    responseCodes: [
+      { code: '200', description: '导入成功。' },
+      { code: '400', description: 'cookies / netscape 缺失或 Netscape 文本非法。' },
+      ...COMMON_API_RESPONSE_CODES,
+      { code: '404', description: '实例不存在。' },
+      { code: '409', description: '实例未运行或调试接口未就绪。' },
+      { code: '500', description: 'CDP 写入失败。' },
+      { code: '503', description: 'Cookie 能力当前不可用。' },
+    ],
+    notes: [
+      '也接受 POST，语义与 PUT 相同。',
+      '导入不会复制用户数据目录，只写入当前运行中浏览器的 Cookie。',
     ],
   },
   {

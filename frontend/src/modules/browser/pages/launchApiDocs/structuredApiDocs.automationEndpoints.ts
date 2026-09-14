@@ -163,6 +163,7 @@ export const AUTOMATION_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
       { name: 'useScriptSelector', type: 'boolean', required: false, location: 'Body', description: '显式指定是否沿用脚本默认 selector。' },
       { name: 'useScriptParams', type: 'boolean', required: false, location: 'Body', description: '显式指定是否沿用脚本默认 params。' },
       { name: 'timeoutMs', type: 'integer', required: false, location: 'Body', description: '本次脚本执行超时时间，范围 1000 到 1800000。' },
+      { name: 'async', type: 'boolean', required: false, location: 'Body', description: 'true 时立即返回 202 和 running 记录，再用 GET /api/automation/scripts/runs/{runId} 查询结果。默认 false，同步等到结束。' },
     ],
     requestExample: {
       language: 'bash',
@@ -202,7 +203,8 @@ export const AUTOMATION_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
 }`,
     },
     responseCodes: [
-      { code: '200', description: '执行成功。' },
+      { code: '200', description: '同步执行完成。' },
+      { code: '202', description: 'async=true，脚本已开始执行。' },
       { code: '400', description: 'scriptId 缺失、selector / targetInput / params 不是对象、字段冲突，或 timeoutMs 超出范围。' },
       { code: '401', description: '已启用 API Key，但请求头缺失或密钥无效。' },
       { code: '405', description: '请求方法不是 POST。' },
@@ -215,7 +217,8 @@ export const AUTOMATION_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
       'useScriptSelector=true 不能同时传 selector；useScriptSelector=false 时必须传 selector。useScriptParams 同理。',
       'timeoutMs=0 表示使用默认值；非零时必须在 1000–1800000 之间。未传 timeoutMs 时执行层默认 5 分钟。',
       '脚本 targetConfig.mode=create 时，targetInput 可带 templateSelector、createNameTemplate / profileName，执行前会 Copy() 主实例。',
-      'Launch API 没有独立的实例 copy 接口；需要复制主实例时用脚本 create 或 Hook instance.type=create。',
+      '只复制实例、不立刻跑脚本时，用 POST /api/profiles/{profileId}/copy。脚本 create 的 Copy() 会把指纹换成全局默认；HTTP copy 默认 auto_fingerprint，只重生成指纹种子。',
+      'async=true 时不要只看 HTTP 202，要轮询 GET /api/automation/scripts/runs/{runId}，直到 status 为 success 或 failed。',
     ],
   },
   {
@@ -272,6 +275,54 @@ export const AUTOMATION_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
     notes: [
       'limit 非整数时沿用默认值 20；整数会裁剪到 1–200。',
       'resultText 和 logText 可能较大，接入方应按需保存。',
+    ],
+  },
+  {
+    id: 'api-automation-run-get-detail',
+    parentId: 'api-automation',
+    label: '单次运行记录',
+    method: 'GET',
+    path: '/api/automation/scripts/runs/{runId}',
+    purpose: '按 runId 查询一次脚本执行结果。',
+    description: '配合 async=true 使用。status=running 表示还在执行；success / failed 表示已经结束。',
+    fields: [
+      ...API_AUTH_HEADER_FIELDS,
+      { name: 'runId', type: 'string', required: true, location: 'Path', description: '脚本运行记录 ID。' },
+    ],
+    requestExample: {
+      language: 'bash',
+      code: ({ launchBaseUrl, authHeader }) => `curl ${launchBaseUrl}/api/automation/scripts/runs/run-1 \\
+  -H "${authHeader}: <your-api-key>"`,
+    },
+    responseExample: {
+      language: 'json',
+      code: () => `{
+  "ok": true,
+  "status": "success",
+  "data": {
+    "run": {
+      "id": "run-1",
+      "scriptId": "news-query-txt",
+      "status": "running",
+      "summary": "脚本执行中",
+      "startedAt": "2026-09-14T10:00:00+08:00",
+      "finishedAt": "",
+      "durationMs": 0
+    }
+  }
+}`,
+    },
+    responseCodes: [
+      { code: '200', description: '返回该次运行记录。' },
+      { code: '400', description: 'runId 非法。' },
+      { code: '401', description: '已启用 API Key，但请求头缺失或密钥无效。' },
+      { code: '404', description: '运行记录不存在。' },
+      { code: '405', description: '请求方法不是 GET。' },
+      { code: '500', description: '读取运行记录失败。' },
+      { code: '503', description: '自动化脚本能力未启用。' },
+    ],
+    notes: [
+      'running 记录的 finishedAt 可能为空。',
     ],
   },
   {

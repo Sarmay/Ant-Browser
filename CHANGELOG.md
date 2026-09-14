@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.5 - 2026-09-14
+
+- Launch API：新增按 selector 复制、复制时指定代理、代理/分组/内核只读目录、实例重启、运行中打开页面、Cookie 导入导出。
+- 自动化脚本：`POST /api/automation/scripts/run` 支持 `async=true`，新增 `GET /api/automation/scripts/runs/{runId}`。
+- 复制实例：UI 和 HTTP 都可以给新实例指定代理池节点或自定义代理。
+- 应用版本升级到 1.5.5。
+
+## 1.5.4 - 2026-09-14
+
+- 新增 HTTP 复制实例接口：`POST /api/profiles/{profileId}/copy`，复用应用内 `CopyWithOptions`，支持名称、指纹模式、launchCode 和复制后自动启动。
+- 文档补齐：复制实例、接口总览、结构化 API 文档和 OpenClaw HTTP 模板改为正式 copy 接口。
+- 应用版本升级到 1.5.4。
+
 ## 1.5.3 - 2026-09-14
 
 - 文档补齐：新增「复制实例」「内置脚本与外部 Node」，补齐脚本目标策略、超时、产物和 HTTP 无 copy 接口时的替代做法。

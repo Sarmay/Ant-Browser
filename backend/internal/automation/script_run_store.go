@@ -29,6 +29,7 @@ type ScriptRunRecord struct {
 
 type ScriptRunRequest struct {
 	ScriptID          string `json:"scriptId"`
+	RunID             string `json:"runId,omitempty"`
 	SelectorText      string `json:"selectorText"`
 	TargetMode        string `json:"targetMode,omitempty"`
 	TargetInput       any    `json:"targetInput,omitempty"`
@@ -111,6 +112,27 @@ func (s *ScriptRunStore) List(limit int) ([]ScriptRunRecord, error) {
 	return items, nil
 }
 
+func (s *ScriptRunStore) Get(runID string) (ScriptRunRecord, error) {
+	runID = strings.TrimSpace(runID)
+	if runID == "" || strings.ContainsAny(runID, `/\:`) || strings.Contains(runID, "..") {
+		return ScriptRunRecord{}, fmt.Errorf("run id is invalid")
+	}
+
+	data, err := os.ReadFile(filepath.Join(s.rootDir, runID+".json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ScriptRunRecord{}, err
+		}
+		return ScriptRunRecord{}, fmt.Errorf("read automation run record failed: %w", err)
+	}
+
+	var record ScriptRunRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return ScriptRunRecord{}, fmt.Errorf("decode automation run record failed: %w", err)
+	}
+	return normalizeScriptRunRecord(record), nil
+}
+
 func normalizeScriptRunRecord(input ScriptRunRecord) ScriptRunRecord {
 	now := time.Now().Format(time.RFC3339)
 
@@ -127,7 +149,10 @@ func normalizeScriptRunRecord(input ScriptRunRecord) ScriptRunRecord {
 	}
 
 	startedAt := firstNonEmpty(input.StartedAt, now)
-	finishedAt := firstNonEmpty(input.FinishedAt, startedAt)
+	finishedAt := strings.TrimSpace(input.FinishedAt)
+	if status != "running" && finishedAt == "" {
+		finishedAt = startedAt
+	}
 	durationMs := input.DurationMs
 	if durationMs < 0 {
 		durationMs = 0

@@ -56,11 +56,15 @@ export function AutomationScriptRefresh(arg1:string):Promise<automation.ScriptRe
 
 export function AutomationScriptRun(arg1:string):Promise<automation.ScriptRunRecord>;
 
+export function AutomationScriptRunGet(arg1:string):Promise<automation.ScriptRunRecord>;
+
 export function AutomationScriptRunList(arg1:number):Promise<Array<automation.ScriptRunRecord>>;
 
 export function AutomationScriptRunWithOptions(arg1:automation.ScriptRunRequest):Promise<automation.ScriptRunRecord>;
 
 export function AutomationScriptSave(arg1:automation.ScriptRecord):Promise<automation.ScriptRecord>;
+
+export function AutomationScriptStartRun(arg1:automation.ScriptRunRequest):Promise<automation.ScriptRunRecord>;
 
 export function BackupExportPackage():Promise<Record<string, any>>;
 
@@ -135,6 +139,8 @@ export function BrowserExtensionSetEnabled(arg1:string,arg2:boolean):Promise<bro
 export function BrowserGetAllTags():Promise<Array<string>>;
 
 export function BrowserGetCookies(arg1:string):Promise<Array<backend.CookieInfo>>;
+
+export function BrowserImportCookies(arg1:string,arg2:Array<backend.CookieInfo>):Promise<number>;
 
 export function BrowserInstanceGetTabs(arg1:string):Promise<Array<browser.Tab>>;
 
@@ -286,13 +292,19 @@ export function GetProxyCheckSettings():Promise<config.ProxyCheckConfig>;
 
 export function GetRunningInstances():Promise<Array<browser.Profile>>;
 
+export function ImportInstanceCookies(arg1:string,arg2:Array<launchcode.CookieRecord>):Promise<number>;
+
 export function InstallAutomationRuntime():Promise<Record<string, any>>;
 
 export function ListGroups():Promise<Array<browser.GroupWithCount>>;
 
+export function ListInstanceCookies(arg1:string):Promise<Array<launchcode.CookieRecord>>;
+
 export function MoveInstancesToGroup(arg1:Array<string>,arg2:string):Promise<void>;
 
 export function OpenCorePath(arg1:string):Promise<void>;
+
+export function OpenInstanceURL(arg1:string,arg2:string):Promise<boolean>;
 
 export function OpenProjectRoot():Promise<void>;
 
@@ -303,6 +315,8 @@ export function OpenUserDataRoot():Promise<void>;
 export function QuitAppOnly():Promise<void>;
 
 export function ReloadConfig():Promise<void>;
+
+export function RestartInstance(arg1:string):Promise<browser.Profile>;
 
 export function SaveAutomationRuntimeSettings(arg1:string,arg2:string):Promise<Record<string, any>>;
 

@@ -392,6 +392,57 @@ GET /api/automation/scripts/runs?limit=20
 - 最小 `1`
 - 最大 `200`
 
+## 8. 复制实例
+
+### 请求
+
+```text
+POST /api/profiles/{profileId}/copy
+```
+
+推荐请求体：
+
+```json
+{
+  "profileName": "task-001",
+  "mode": "auto_fingerprint",
+  "automationTargets": ["seed"],
+  "autoLaunch": false
+}
+```
+
+字段说明：
+
+- `profileName`
+  新实例名称；省略时自动生成
+- `mode`
+  `auto_fingerprint`（默认）或 `regular`
+- `automationTargets`
+  仅 `auto_fingerprint` 生效，默认 `["seed"]`
+- `launchCode`
+  可选；省略时自动生成
+- `autoLaunch` / `start`
+  复制后是否立即启动，语义与创建实例相同
+
+成功响应：
+
+```text
+201 Created
+```
+
+会带：
+
+- `copied=true`
+- `created=true`
+- 新的 `profileId` / `launchCode`
+- `sourceProfileId`
+
+注意：
+
+- 只复制配置，不复制 Cookie 和用户数据目录
+- 默认不要用 `mode=regular`，否则多个号会共用源实例指纹
+- 脚本 `targetConfig.mode=create` 仍走 `Copy()`，指纹整份换成全局默认，和本接口默认行为不同
+
 ## 推荐对接流程
 
 ### 方案 A：OpenClaw 接管浏览器

@@ -32,7 +32,7 @@ var profileCopyNameSuffixPattern = regexp.MustCompile(`[[:space:]]*(?:\([[:space
 
 // Copy 复制实例配置（除指纹参数外全部复制，指纹使用默认值生成新种子）
 func (m *Manager) Copy(profileId string, newName string) (*Profile, error) {
-	return m.copyProfile(profileId, newName, func(*Profile) []string {
+	return m.copyProfile(profileId, newName, ProfileCopyOptions{}, func(*Profile) []string {
 		return append([]string{}, m.Config.Browser.DefaultFingerprintArgs...)
 	})
 }
@@ -51,7 +51,7 @@ func (m *Manager) CopyWithOptions(profileId string, newName string, options Prof
 	if err != nil {
 		return nil, err
 	}
-	return m.copyProfile(profileId, newName, func(src *Profile) []string {
+	return m.copyProfile(profileId, newName, options, func(src *Profile) []string {
 		switch normalizedMode {
 		case copyModeRegular:
 			return append([]string{}, src.FingerprintArgs...)
@@ -61,7 +61,7 @@ func (m *Manager) CopyWithOptions(profileId string, newName string, options Prof
 	})
 }
 
-func (m *Manager) copyProfile(profileId string, newName string, fingerprintResolver func(*Profile) []string) (*Profile, error) {
+func (m *Manager) copyProfile(profileId string, newName string, options ProfileCopyOptions, fingerprintResolver func(*Profile) []string) (*Profile, error) {
 	log := logger.New("Browser")
 	m.InitData()
 	m.Mutex.Lock()
@@ -108,6 +108,11 @@ func (m *Manager) copyProfile(profileId string, newName string, fingerprintResol
 		UpdatedAt:          nowText,
 	}
 
+	if err := m.applyCopyProxyLocked(profile, options); err != nil {
+		log.Error("复制实例时代理设置失败", logger.F("src_id", profileId), logger.F("error", err.Error()))
+		return nil, err
+	}
+
 	m.Profiles[newId] = profile
 	log.Info("实例复制成功", logger.F("src_id", profileId), logger.F("new_id", newId), logger.F("new_name", profileName))
 
@@ -117,6 +122,34 @@ func (m *Manager) copyProfile(profileId string, newName string, fingerprintResol
 
 	m.ensureProfileLaunchCode(profile)
 	return profile, nil
+}
+
+func (m *Manager) applyCopyProxyLocked(profile *Profile, options ProfileCopyOptions) error {
+	if profile == nil {
+		return nil
+	}
+	proxyID := strings.TrimSpace(options.ProxyId)
+	proxyConfig := strings.TrimSpace(options.ProxyConfig)
+	if proxyID == "" && proxyConfig == "" {
+		return nil
+	}
+
+	resolved, err := m.resolveProfileProxyInput(proxyID, proxyConfig)
+	if err != nil {
+		return err
+	}
+	if resolved.HasSelectedProxy {
+		_ = BindProfileToProxy(profile, resolved.SelectedProxy, true)
+		return nil
+	}
+	if resolved.FallbackToDirect {
+		_ = m.bindProfileToDirectProxy(profile)
+		return nil
+	}
+	profile.ProxyId = resolved.ProxyId
+	profile.ProxyConfig = resolved.ProxyConfig
+	_ = ClearProfileProxyBinding(profile)
+	return nil
 }
 
 func buildProfileCopyName(sourceName string, now time.Time) string {

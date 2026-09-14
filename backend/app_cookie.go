@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"ant-chrome/backend/internal/launchcode"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -233,6 +235,97 @@ func (a *App) BrowserClearCookies(profileId string) error {
 }
 
 // BrowserExportCookies 导出 Netscape 格式 Cookie 字符串
+func cookieInfoToRecord(cookie CookieInfo) launchcode.CookieRecord {
+	return launchcode.CookieRecord{
+		Name:     cookie.Name,
+		Value:    cookie.Value,
+		Domain:   cookie.Domain,
+		Path:     cookie.Path,
+		Expires:  cookie.Expires,
+		HTTPOnly: cookie.HttpOnly,
+		Secure:   cookie.Secure,
+		SameSite: cookie.SameSite,
+	}
+}
+
+func cookieRecordToInfo(cookie launchcode.CookieRecord) CookieInfo {
+	return CookieInfo{
+		Name:     cookie.Name,
+		Value:    cookie.Value,
+		Domain:   cookie.Domain,
+		Path:     cookie.Path,
+		Expires:  cookie.Expires,
+		HttpOnly: cookie.HTTPOnly,
+		Secure:   cookie.Secure,
+		SameSite: cookie.SameSite,
+	}
+}
+
+// BrowserImportCookies 通过 CDP 写入 Cookie。
+func (a *App) BrowserImportCookies(profileId string, cookies []CookieInfo) (int, error) {
+	debugPort, err := a.getDebugPort(profileId)
+	if err != nil {
+		return 0, err
+	}
+
+	payload := make([]map[string]any, 0, len(cookies))
+	for _, cookie := range cookies {
+		name := strings.TrimSpace(cookie.Name)
+		if name == "" {
+			continue
+		}
+		item := map[string]any{
+			"name":     name,
+			"value":    cookie.Value,
+			"httpOnly": cookie.HttpOnly,
+			"secure":   cookie.Secure,
+		}
+		if domain := strings.TrimSpace(cookie.Domain); domain != "" {
+			item["domain"] = domain
+		}
+		if path := strings.TrimSpace(cookie.Path); path != "" {
+			item["path"] = path
+		} else {
+			item["path"] = "/"
+		}
+		if cookie.Expires > 0 {
+			item["expires"] = cookie.Expires
+		}
+		if sameSite := strings.TrimSpace(cookie.SameSite); sameSite != "" {
+			item["sameSite"] = sameSite
+		}
+		payload = append(payload, item)
+	}
+	if len(payload) == 0 {
+		return 0, fmt.Errorf("cookies is required")
+	}
+
+	if _, err := cdpCall(debugPort, "Network.setCookies", map[string]any{"cookies": payload}); err != nil {
+		return 0, err
+	}
+	return len(payload), nil
+}
+
+func (a *App) ListInstanceCookies(profileId string) ([]launchcode.CookieRecord, error) {
+	cookies, err := a.BrowserGetCookies(profileId)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]launchcode.CookieRecord, 0, len(cookies))
+	for _, cookie := range cookies {
+		out = append(out, cookieInfoToRecord(cookie))
+	}
+	return out, nil
+}
+
+func (a *App) ImportInstanceCookies(profileId string, cookies []launchcode.CookieRecord) (int, error) {
+	items := make([]CookieInfo, 0, len(cookies))
+	for _, cookie := range cookies {
+		items = append(items, cookieRecordToInfo(cookie))
+	}
+	return a.BrowserImportCookies(profileId, items)
+}
+
 func (a *App) BrowserExportCookies(profileId string) (string, error) {
 	cookies, err := a.BrowserGetCookies(profileId)
 	if err != nil {

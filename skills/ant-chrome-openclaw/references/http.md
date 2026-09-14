@@ -175,6 +175,50 @@ curl_ant \
   }'
 ```
 
+## Profile copy
+
+Use this when the user wants a new instance cloned from an existing template profile. This copies configuration only, not cookies or the user-data directory. Default fingerprint mode is `auto_fingerprint` and only regenerates the fingerprint seed.
+
+```bash
+curl_ant \
+  -H "Content-Type: application/json" \
+  -X POST "$BASE_URL/api/profiles/YOUR_PROFILE_ID/copy" \
+  --data-raw '{
+    "profileName": "task-001",
+    "mode": "auto_fingerprint",
+    "automationTargets": ["seed"]
+  }'
+```
+
+Copy by launchCode:
+
+```bash
+curl_ant \
+  -H "Content-Type: application/json" \
+  -X POST "$BASE_URL/api/profiles/copy" \
+  --data-raw '{
+    "selector": { "code": "MAIN_001" },
+    "profileName": "task-001",
+    "proxyConfig": "http://127.0.0.1:7890"
+  }'
+```
+
+Expected fields to capture:
+
+- `ok`
+- `copied`
+- `profileId`
+- `profileName`
+- `launchCode`
+- `sourceProfileId`
+- `launched`
+
+Notes:
+
+- Empty body is valid.
+- `mode=regular` keeps the source fingerprint and should not be used for multi-account isolation.
+- To copy and then run a saved script, prefer script `targetConfig.mode=create` or Hook `instance.type=create` instead of copying first and reconstructing the workflow.
+
 ## Profile status
 
 ```bash

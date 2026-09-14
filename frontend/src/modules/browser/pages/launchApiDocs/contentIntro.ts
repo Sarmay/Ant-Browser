@@ -426,6 +426,15 @@ curl -H "X-Ant-Api-Key: <your-api-key>" http://127.0.0.1:19876/api/health
 | 实例管理 | \`DELETE\` | \`/api/profiles/{profileId}\` |
 | 实例管理 | \`GET\` | \`/api/profiles/{profileId}/status\` |
 | 实例管理 | \`POST\` | \`/api/profiles/{profileId}/stop\` |
+| 实例管理 | \`POST\` | \`/api/profiles/{profileId}/copy\` |
+| 实例管理 | \`POST\` | \`/api/profiles/copy\` |
+| 实例管理 | \`POST\` | \`/api/profiles/{profileId}/restart\` |
+| 实例管理 | \`POST\` | \`/api/profiles/{profileId}/open-url\` |
+| 实例管理 | \`GET\` | \`/api/profiles/{profileId}/cookies\` |
+| 实例管理 | \`PUT\` | \`/api/profiles/{profileId}/cookies\` |
+| 目录 | \`GET\` | \`/api/proxies\` |
+| 目录 | \`GET\` | \`/api/groups\` |
+| 目录 | \`GET\` | \`/api/cores\` |
 | 启动 | \`GET\` | \`/api/launch/{code}\` |
 | 启动 | \`POST\` | \`/api/launch\` |
 | 运行态 | \`GET\` | \`/api/runtime/active\` |
@@ -436,6 +445,7 @@ curl -H "X-Ant-Api-Key: <your-api-key>" http://127.0.0.1:19876/api/health
 | 自动化脚本 | \`GET\` | \`/api/automation/scripts/{scriptId}\` |
 | 自动化脚本 | \`POST\` | \`/api/automation/scripts/run\` |
 | 自动化脚本 | \`GET\` | \`/api/automation/scripts/runs\` |
+| 自动化脚本 | \`GET\` | \`/api/automation/scripts/runs/{runId}\` |
 | 自动化 Hook | \`POST\` | \`/api/automation/hooks/{hookPath}\` |
 | 调用日志 | \`GET\` | \`/api/launch/logs\` |
 | CDP 统一入口 | \`GET\` | \`/json/version\` |
@@ -464,9 +474,14 @@ curl -H "X-Ant-Api-Key: <your-api-key>" http://127.0.0.1:19876/api/health
 | 需要 ready 后再接管 | \`POST /api/runtime/session\` |
 | 只有 selector，想查状态 | \`POST /api/runtime/status\` |
 | 只有 selector，想停止 | \`POST /api/runtime/stop\` |
+| 从主实例复制新号 | \`POST /api/profiles/{profileId}/copy\` 或 \`POST /api/profiles/copy\` |
+| 复制时换代理 | copy 请求带 \`proxyId\` 或 \`proxyConfig\` |
+| 已运行实例再开页 | \`POST /api/profiles/{profileId}/open-url\` |
+| 导入 / 导出登录 Cookie | \`GET/PUT /api/profiles/{profileId}/cookies\` |
+| 长任务脚本 | \`async=true\` 再查 \`/api/automation/scripts/runs/{runId}\` |
 | 从主实例复制新号再跑页面 | 脚本 \`targetConfig.mode=create\`，或 Hook \`instance.type=create\` |
 | 执行已有脚本 | \`POST /api/automation/scripts/run\` |
 | 用稳定路径触发脚本 | \`POST /api/automation/hooks/{hookPath}\` |
 
-Launch API 没有 copy 接口。外部若自己建实例，见 \`复制实例\`。
+复制只拷配置。完整字段和指纹模式见 \`复制实例\`。
 `

@@ -15,6 +15,7 @@ import { DOC_COPY_INSTANCE } from './contentCopy'
 import { DOC_SCRIPT_VS_NODE } from './contentScriptVsNode'
 import {
   DOC_API_AUTOMATION,
+  DOC_API_CATALOG,
   DOC_API_PROFILES_LAUNCH,
   DOC_API_RUNTIME,
   DOC_API_SYSTEM,
@@ -57,7 +58,7 @@ export const DOC_GROUPS: LaunchDocGroup[] = [
       {
         id: 'tutorial-copy-instance',
         label: '复制实例',
-        summary: '从主实例复制新号：UI 复制、脚本 create、HTTP 近似做法。',
+        summary: '从主实例复制新号：UI 复制、HTTP copy、脚本 create。',
         content: DOC_COPY_INSTANCE,
       },
       {
@@ -155,6 +156,12 @@ export const DOC_GROUPS: LaunchDocGroup[] = [
         label: '实例与启动',
         summary: '实例配置、按 Code 启动和参数化启动。',
         content: DOC_API_PROFILES_LAUNCH,
+      },
+      {
+        id: 'api-catalog',
+        label: '代理 / 分组 / 内核',
+        summary: '只读目录，给创建和复制实例选 proxyId / groupId / coreId。',
+        content: DOC_API_CATALOG,
       },
       {
         id: 'api-runtime',

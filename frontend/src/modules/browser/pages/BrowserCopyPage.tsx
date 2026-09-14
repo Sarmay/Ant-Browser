@@ -82,6 +82,7 @@ export function BrowserCopyPage() {
         <div className="mt-4">
           <BrowserProfileCopyForm
             copyName={targetName}
+            sourceProfile={sourceProfile}
             copyOptions={copyOptions}
             onCopyNameChange={setTargetName}
             onCopyOptionsChange={setCopyOptions}

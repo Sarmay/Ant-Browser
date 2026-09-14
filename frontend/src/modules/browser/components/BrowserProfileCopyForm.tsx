@@ -1,13 +1,18 @@
+import { useEffect, useState } from 'react'
 import clsx from 'clsx'
-import { FormItem, Input } from '../../../shared/components'
+import { FormItem, Input, Select } from '../../../shared/components'
+import { fetchBrowserProxies } from '../api'
 import {
   BROWSER_PROFILE_AUTOMATION_TARGET_OPTIONS,
   isBrowserProfileCopyOptionsValid,
 } from '../copyOptions'
-import type { BrowserProfileAutomationTarget, BrowserProfileCopyOptions } from '../types'
+import type { BrowserProfile, BrowserProfileAutomationTarget, BrowserProfileCopyOptions, BrowserProxy } from '../types'
+
+type CopyProxyMode = 'inherit' | 'pool' | 'custom'
 
 interface BrowserProfileCopyFormProps {
   sourceName?: string
+  sourceProfile?: BrowserProfile | null
   copyName: string
   copyOptions: BrowserProfileCopyOptions
   onCopyNameChange: (value: string) => void
@@ -15,14 +20,27 @@ interface BrowserProfileCopyFormProps {
   autoFocusName?: boolean
 }
 
+function resolveCopyProxyMode(options: BrowserProfileCopyOptions): CopyProxyMode {
+  if (options.proxyId?.trim()) return 'pool'
+  if (options.proxyConfig?.trim()) return 'custom'
+  return 'inherit'
+}
+
 export function BrowserProfileCopyForm({
   sourceName,
+  sourceProfile,
   copyName,
   copyOptions,
   onCopyNameChange,
   onCopyOptionsChange,
   autoFocusName = false,
 }: BrowserProfileCopyFormProps) {
+  const [proxies, setProxies] = useState<BrowserProxy[]>([])
+  const proxyMode = resolveCopyProxyMode(copyOptions)
+
+  useEffect(() => {
+    fetchBrowserProxies().then((items) => setProxies(items || []))
+  }, [])
   const setMode = (mode: BrowserProfileCopyOptions['mode']) => {
     onCopyOptionsChange({
       ...copyOptions,
@@ -41,9 +59,28 @@ export function BrowserProfileCopyForm({
     })
   }
 
+  const setProxyMode = (mode: CopyProxyMode) => {
+    if (mode === 'inherit') {
+      onCopyOptionsChange({ ...copyOptions, proxyId: '', proxyConfig: '' })
+      return
+    }
+    if (mode === 'pool') {
+      onCopyOptionsChange({
+        ...copyOptions,
+        proxyId: copyOptions.proxyId?.trim() || proxies[0]?.proxyId || '',
+        proxyConfig: '',
+      })
+      return
+    }
+    onCopyOptionsChange({ ...copyOptions, proxyId: '', proxyConfig: copyOptions.proxyConfig || '' })
+  }
+
   const automationInvalid =
     copyOptions.mode === 'auto_fingerprint' && !isBrowserProfileCopyOptionsValid(copyOptions)
   const selectedAutomationCount = copyOptions.automationTargets.length
+  const sourceProxyLabel = sourceProfile?.proxyId
+    ? (proxies.find((item) => item.proxyId === sourceProfile.proxyId)?.proxyName || sourceProfile.proxyId)
+    : (sourceProfile?.proxyConfig || '直连 / 未设置')
 
   return (
     <div className="space-y-5">
@@ -154,6 +191,43 @@ export function BrowserProfileCopyForm({
               </div>
             </FormItem>
           </div>
+        ) : null}
+      </div>
+
+      <div className="space-y-3">
+        <div className="text-sm font-medium text-[var(--color-text-secondary)]">代理</div>
+        <FormItem label="代理来源" hint={proxyMode === 'inherit' ? `跟随源实例：${sourceProxyLabel}` : undefined}>
+          <Select
+            value={proxyMode}
+            onChange={(event) => setProxyMode(event.target.value as CopyProxyMode)}
+            options={[
+              { value: 'inherit', label: '跟随源实例' },
+              { value: 'pool', label: '代理池' },
+              { value: 'custom', label: '自定义代理' },
+            ]}
+          />
+        </FormItem>
+        {proxyMode === 'pool' ? (
+          <FormItem label="代理节点">
+            <Select
+              value={copyOptions.proxyId || ''}
+              onChange={(event) => onCopyOptionsChange({ ...copyOptions, proxyId: event.target.value, proxyConfig: '' })}
+              options={
+                proxies.length > 0
+                  ? proxies.map((proxy) => ({ value: proxy.proxyId, label: proxy.proxyName || proxy.proxyId }))
+                  : [{ value: '', label: '暂无代理，请先到代理池创建' }]
+              }
+            />
+          </FormItem>
+        ) : null}
+        {proxyMode === 'custom' ? (
+          <FormItem label="自定义代理" hint="支持 http://、https://、socks5://，只对这个新实例生效。">
+            <Input
+              value={copyOptions.proxyConfig || ''}
+              onChange={(event) => onCopyOptionsChange({ ...copyOptions, proxyId: '', proxyConfig: event.target.value })}
+              placeholder="http://127.0.0.1:7890"
+            />
+          </FormItem>
         ) : null}
       </div>
     </div>

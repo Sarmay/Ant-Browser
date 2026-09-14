@@ -28,6 +28,14 @@ func (a *App) StopInstance(profileId string) (*browser.Profile, error) {
 	return a.BrowserInstanceStop(profileId)
 }
 
+func (a *App) RestartInstance(profileId string) (*browser.Profile, error) {
+	return a.BrowserInstanceRestart(profileId)
+}
+
+func (a *App) OpenInstanceURL(profileId string, targetURL string) (bool, error) {
+	return a.BrowserInstanceOpenUrl(profileId, targetURL)
+}
+
 // WaitInstanceDebugReady 实现 launchcode.BrowserDebugWaiter 接口
 func (a *App) WaitInstanceDebugReady(profileId string, debugPort int, timeout time.Duration) (*browser.Profile, bool, error) {
 	if timeout <= 0 {
@@ -159,8 +167,13 @@ var _ launchcode.BrowserStarter = (*App)(nil)
 var _ launchcode.BrowserStarterWithParams = (*App)(nil)
 var _ launchcode.BrowserStatusProvider = (*App)(nil)
 var _ launchcode.BrowserStopper = (*App)(nil)
+var _ launchcode.BrowserRestarter = (*App)(nil)
+var _ launchcode.BrowserURLOpener = (*App)(nil)
+var _ launchcode.BrowserCookieManager = (*App)(nil)
 var _ launchcode.BrowserDebugWaiter = (*App)(nil)
 var _ launchcode.AutomationScriptLister = (*App)(nil)
 var _ launchcode.AutomationScriptGetter = (*App)(nil)
 var _ launchcode.AutomationScriptRunner = (*App)(nil)
 var _ launchcode.AutomationScriptRunLister = (*App)(nil)
+var _ launchcode.AutomationScriptRunGetter = (*App)(nil)
+var _ launchcode.AutomationScriptRunStarter = (*App)(nil)

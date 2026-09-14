@@ -26,6 +26,68 @@ func decodeProfileWriteRequest(r *http.Request) (ProfileWriteRequest, int, strin
 	return req, http.StatusOK, ""
 }
 
+func decodeProfileCopyRequest(r *http.Request) (ProfileCopyRequest, int, string) {
+	if r.Method != http.MethodPost {
+		return ProfileCopyRequest{}, http.StatusMethodNotAllowed, "method not allowed"
+	}
+	if r.Body == nil {
+		return ProfileCopyRequest{}, http.StatusOK, ""
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		return ProfileCopyRequest{}, http.StatusBadRequest, "invalid request body"
+	}
+	if strings.TrimSpace(string(body)) == "" {
+		return ProfileCopyRequest{}, http.StatusOK, ""
+	}
+
+	var req ProfileCopyRequest
+	dec := json.NewDecoder(strings.NewReader(string(body)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		return ProfileCopyRequest{}, http.StatusBadRequest, "invalid request body"
+	}
+	return req, http.StatusOK, ""
+}
+
+func profileCopyOptionsFromRequest(req ProfileCopyRequest, mode string) browser.ProfileCopyOptions {
+	return browser.ProfileCopyOptions{
+		Mode:              mode,
+		AutomationTargets: req.AutomationTargets,
+		ProxyId:           strings.TrimSpace(req.ProxyId),
+		ProxyConfig:       strings.TrimSpace(req.ProxyConfig),
+	}
+}
+
+func mergeCopySelector(req ProfileCopyRequest) LaunchSelector {
+	var nested LaunchSelector
+	if req.Selector != nil {
+		nested = *req.Selector
+	}
+	return normalizeRuntimeSelector(buildMergedSelector(selectorMergeInput{
+		Code:        firstNonEmpty(nested.Code, req.Code),
+		Key:         firstNonEmpty(nested.Key, req.Key),
+		ProfileID:   firstNonEmpty(nested.ProfileID, req.ProfileID),
+		ProfileName: nested.ProfileName,
+		Keywords:    appendSelectorTerms(nil, "", nested.Keywords, nested.Keyword, req.Keyword, req.Keywords),
+		Tags:        appendSelectorTerms(nil, nested.Tag, nested.Tags, req.Tag, req.Tags),
+		GroupID:     firstNonEmpty(nested.GroupID, req.GroupID),
+		MatchMode:   firstNonEmpty(nested.MatchMode, req.MatchMode),
+	}))
+}
+
+func normalizeProfileCopyMode(mode string) (string, int, string) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "auto_fingerprint":
+		return "auto_fingerprint", http.StatusOK, ""
+	case "regular":
+		return "regular", http.StatusOK, ""
+	default:
+		return "", http.StatusBadRequest, "mode must be auto_fingerprint or regular"
+	}
+}
+
 func normalizeProfileInput(input browser.ProfileInput) browser.ProfileInput {
 	return browser.ProfileInput{
 		ProfileName:        strings.TrimSpace(input.ProfileName),
@@ -96,7 +158,7 @@ func parseProfilePath(path string) (string, string, bool) {
 			return "", "", false
 		}
 		switch action {
-		case "status", "stop":
+		case "status", "stop", "copy", "restart", "open-url", "cookies":
 			return profileID, action, true
 		default:
 			return "", "", false
@@ -134,6 +196,17 @@ func mapProfileWriteErrorStatus(err error) int {
 	case strings.Contains(msg, "proxy id not found"),
 		strings.Contains(msg, "代理id不存在"):
 		return http.StatusBadRequest
+	case strings.Contains(msg, "复制实例失败"):
+		return http.StatusBadRequest
+	case strings.Contains(msg, "目标地址不能为空"),
+		strings.Contains(msg, "url is required"),
+		strings.Contains(msg, "cookies is required"),
+		strings.Contains(msg, "invalid netscape"):
+		return http.StatusBadRequest
+	case strings.Contains(msg, "实例当前未运行"),
+		strings.Contains(msg, "实例未运行"),
+		strings.Contains(msg, "调试接口尚未就绪"):
+		return http.StatusConflict
 	case strings.Contains(msg, "实例数量已达上限"):
 		return http.StatusConflict
 	default:

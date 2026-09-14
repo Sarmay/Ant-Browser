@@ -61,6 +61,8 @@ type ProfileInput struct {
 type ProfileCopyOptions struct {
 	Mode              string   `json:"mode"`
 	AutomationTargets []string `json:"automationTargets"`
+	ProxyId           string   `json:"proxyId"`
+	ProxyConfig       string   `json:"proxyConfig"`
 }
 
 // Tab 浏览器标签页

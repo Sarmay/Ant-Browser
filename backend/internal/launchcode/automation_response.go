@@ -45,9 +45,13 @@ func writeAutomationAPIError(w http.ResponseWriter, status int, code string, mes
 }
 
 func writeAutomationAPISuccess[T any](w http.ResponseWriter, status int, message string, data T) {
+	resultStatus := "success"
+	if status == http.StatusAccepted {
+		resultStatus = "accepted"
+	}
 	writeJSON(w, status, automationAPIResponse[T]{
 		OK:      true,
-		Status:  "success",
+		Status:  resultStatus,
 		Message: message,
 		Data:    data,
 	})

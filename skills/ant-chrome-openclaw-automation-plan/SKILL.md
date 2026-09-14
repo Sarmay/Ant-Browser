@@ -26,6 +26,7 @@ If the task is operational usage of LaunchServer from OpenClaw, read the sibling
    - `GET /api/automation/scripts`
    - `POST /api/automation/scripts/run`
    - `GET /api/automation/scripts/runs`
+   - `POST /api/profiles/{profileId}/copy`
 3. Do not add `/api/automation/openclaw/*` private routes unless the user explicitly needs a compatibility alias for an already-fixed external protocol.
 4. Do not re-invent a second automation runtime for OpenClaw; reuse the existing script execution chain.
 5. Keep the external script protocol object-shaped (`selector` / `params`) and only convert to internal text fields at the boundary.

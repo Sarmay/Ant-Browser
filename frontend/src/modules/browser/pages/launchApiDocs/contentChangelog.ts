@@ -1,5 +1,18 @@
 export const DOC_CHANGELOG = `# 更新日志
 
+## 1.5.5 - 2026-09-14
+
+- Launch API：支持按 selector 复制、复制时指定代理、只读代理/分组/内核目录、实例重启、运行中打开页面、Cookie 导入导出。
+- 脚本执行支持 \`async=true\`，用 \`GET /api/automation/scripts/runs/{runId}\` 查询进度。
+- 应用内复制实例可改代理：跟随源实例、代理池或自定义代理。
+- 应用版本升级到 1.5.5。
+
+## 1.5.4 - 2026-09-14
+
+- 新增 \`POST /api/profiles/{profileId}/copy\`：外部可按 UI 复制逻辑开新号，默认 \`auto_fingerprint\` 只重生成指纹种子。
+- 文档同步：复制实例、接口总览和 OpenClaw HTTP 模板改为正式 copy 接口，不再要求自己拼 \`POST /api/profiles\`。
+- 应用版本升级到 1.5.4。
+
 ## 1.5.3 - 2026-09-14
 
 - 新增「复制实例」：说明 UI 复制、脚本 \`create\`、以及 HTTP 没有 copy 接口时怎么近似创建。

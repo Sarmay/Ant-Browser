@@ -161,6 +161,8 @@ export type BrowserProfileAutomationTarget =
 export interface BrowserProfileCopyOptions {
   mode: BrowserProfileCopyMode
   automationTargets: BrowserProfileAutomationTarget[]
+  proxyId?: string
+  proxyConfig?: string
 }
 
 export interface BrowserTab {

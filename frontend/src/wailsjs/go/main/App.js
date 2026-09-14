@@ -94,6 +94,10 @@ export function AutomationScriptRun(arg1) {
   return window['go']['main']['App']['AutomationScriptRun'](arg1);
 }
 
+export function AutomationScriptRunGet(arg1) {
+  return window['go']['main']['App']['AutomationScriptRunGet'](arg1);
+}
+
 export function AutomationScriptRunList(arg1) {
   return window['go']['main']['App']['AutomationScriptRunList'](arg1);
 }
@@ -104,6 +108,10 @@ export function AutomationScriptRunWithOptions(arg1) {
 
 export function AutomationScriptSave(arg1) {
   return window['go']['main']['App']['AutomationScriptSave'](arg1);
+}
+
+export function AutomationScriptStartRun(arg1) {
+  return window['go']['main']['App']['AutomationScriptStartRun'](arg1);
 }
 
 export function BackupExportPackage() {
@@ -252,6 +260,10 @@ export function BrowserGetAllTags() {
 
 export function BrowserGetCookies(arg1) {
   return window['go']['main']['App']['BrowserGetCookies'](arg1);
+}
+
+export function BrowserImportCookies(arg1, arg2) {
+  return window['go']['main']['App']['BrowserImportCookies'](arg1, arg2);
 }
 
 export function BrowserInstanceGetTabs(arg1) {
@@ -554,6 +566,10 @@ export function GetRunningInstances() {
   return window['go']['main']['App']['GetRunningInstances']();
 }
 
+export function ImportInstanceCookies(arg1, arg2) {
+  return window['go']['main']['App']['ImportInstanceCookies'](arg1, arg2);
+}
+
 export function InstallAutomationRuntime() {
   return window['go']['main']['App']['InstallAutomationRuntime']();
 }
@@ -562,12 +578,20 @@ export function ListGroups() {
   return window['go']['main']['App']['ListGroups']();
 }
 
+export function ListInstanceCookies(arg1) {
+  return window['go']['main']['App']['ListInstanceCookies'](arg1);
+}
+
 export function MoveInstancesToGroup(arg1, arg2) {
   return window['go']['main']['App']['MoveInstancesToGroup'](arg1, arg2);
 }
 
 export function OpenCorePath(arg1) {
   return window['go']['main']['App']['OpenCorePath'](arg1);
+}
+
+export function OpenInstanceURL(arg1, arg2) {
+  return window['go']['main']['App']['OpenInstanceURL'](arg1, arg2);
 }
 
 export function OpenProjectRoot() {
@@ -588,6 +612,10 @@ export function QuitAppOnly() {
 
 export function ReloadConfig() {
   return window['go']['main']['App']['ReloadConfig']();
+}
+
+export function RestartInstance(arg1) {
+  return window['go']['main']['App']['RestartInstance'](arg1);
 }
 
 export function SaveAutomationRuntimeSettings(arg1, arg2) {

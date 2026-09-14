@@ -70,6 +70,58 @@ func (s *LaunchServer) maybeAutoLaunchProfile(profile *browser.Profile, req Prof
 	return launchedProfile, true, nil
 }
 
+func (s *LaunchServer) resolveCopySource(pathProfileID string, req ProfileCopyRequest) (string, int, string) {
+	pathProfileID = strings.TrimSpace(pathProfileID)
+	if pathProfileID != "" {
+		return pathProfileID, http.StatusOK, ""
+	}
+
+	selector := mergeCopySelector(req)
+	if selector.IsEmpty() {
+		return "", http.StatusBadRequest, "selector is required"
+	}
+	if err := selector.Validate(); err != nil {
+		return "", http.StatusBadRequest, err.Error()
+	}
+	if selector.MatchMode == launchMatchModeAll {
+		return "", http.StatusBadRequest, "matchMode must be unique or first for profile copy"
+	}
+
+	profile, status, errMsg := s.findProfileBySelector(selector)
+	if errMsg != "" {
+		return "", status, errMsg
+	}
+	return profile.ProfileId, http.StatusOK, ""
+}
+
+func (s *LaunchServer) copyProfile(sourceID, newName string, options browser.ProfileCopyOptions, requestedCode string) (*browser.Profile, string, int, string) {
+	profile, err := s.copyProfileInternal(sourceID, newName, options)
+	if err != nil {
+		return nil, "", mapProfileWriteErrorStatus(err), err.Error()
+	}
+	if profile == nil {
+		return nil, "", http.StatusInternalServerError, "profile copy returned nil profile"
+	}
+
+	launchCode, status, errMsg := s.applyRequestedLaunchCode(profile.ProfileId, strings.TrimSpace(profile.LaunchCode), requestedCode)
+	if errMsg != "" {
+		_ = s.deleteCreatedProfile(profile.ProfileId)
+		return nil, "", status, errMsg
+	}
+	profile.LaunchCode = launchCode
+	return profile, launchCode, http.StatusCreated, ""
+}
+
+func (s *LaunchServer) copyProfileInternal(sourceID, newName string, options browser.ProfileCopyOptions) (*browser.Profile, error) {
+	if copier, ok := s.starter.(profileCopier); ok {
+		return copier.CopyProfileWithOptions(sourceID, newName, options)
+	}
+	if s.browserMgr != nil {
+		return s.browserMgr.CopyWithOptions(sourceID, newName, options)
+	}
+	return nil, http.ErrNotSupported
+}
+
 func (s *LaunchServer) createProfileInternal(input browser.ProfileInput) (*browser.Profile, error) {
 	if creator, ok := s.starter.(profileCreator); ok {
 		return creator.CreateProfile(input)
@@ -203,4 +255,27 @@ func (s *LaunchServer) profileWriteSuccessPayload(profile *browser.Profile, laun
 	payload["launched"] = true
 	payload["profile"] = profile
 	return payload
+}
+
+func (s *LaunchServer) profileCopySuccessPayload(profile *browser.Profile, launchCode, sourceProfileID string, launched bool) map[string]interface{} {
+	payload := s.profileWriteSuccessPayload(profile, launchCode, true, false, launched)
+	payload["copied"] = true
+	payload["sourceProfileId"] = sourceProfileID
+	return payload
+}
+
+func (s *LaunchServer) profileCopyFailurePayload(profile *browser.Profile, launchCode, sourceProfileID, errMsg string) map[string]interface{} {
+	return map[string]interface{}{
+		"ok":              false,
+		"created":         true,
+		"updated":         false,
+		"copied":          true,
+		"launched":        false,
+		"profileId":       profile.ProfileId,
+		"profileName":     profile.ProfileName,
+		"launchCode":      launchCode,
+		"sourceProfileId": sourceProfileID,
+		"profile":         profile,
+		"error":           errMsg,
+	}
 }

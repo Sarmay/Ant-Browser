@@ -41,7 +41,7 @@ Read `references/http.md` in this skill directory when you need exact request pa
    - Selector or launch-code based runtime check: `POST /api/runtime/status`
    - Selector or launch-code based stop: `POST /api/runtime/stop`
    - Selector-based launch: `POST /api/launch`
-   - Profile list/create/update/delete: `/api/profiles`
+   - Profile list/create/update/delete/copy: `/api/profiles`
    - Automation script list/detail/run/runs: `/api/automation/scripts`
 4. Prefer exact identifiers in this order: `launchCode`, `profileId`, `profileName`, then keyword/tag/group selectors.
 5. For selector-based launches, use `matchMode: "unique"` unless the user explicitly wants first-match or all-match behavior.
@@ -61,6 +61,6 @@ Read `references/http.md` in this skill directory when you need exact request pa
 - Treat Ant Browser as the source of truth for profile state, proxies, tags, launch codes, and Chrome cores.
 - Do not switch to another Ant Browser target while the current remote CDP session is still being used unless the user explicitly asks to switch. LaunchServer exposes one active CDP target at a time. Query `GET /api/runtime/active` before switching if the current target matters.
 - Do not claim that OpenClaw `browser stop` stops the Ant Browser process. For remote CDP profiles it only detaches the OpenClaw control session.
-- Do not invent HTTP routes that do not exist. The current stable surface is `health`, `profiles`, `profile status`, `profile stop`, `runtime active`, `runtime status`, `runtime stop`, `launch`, `launch logs`, and the automation script APIs under `/api/automation/scripts`.
+- Do not invent HTTP routes that do not exist. The current stable surface includes `health`, `profiles` CRUD/copy/restart/open-url/cookies, `proxies`/`groups`/`cores` catalogs, `runtime` active/session/status/stop, `launch`, `launch logs`, and the automation script APIs under `/api/automation/scripts`.
 - If selector resolution is ambiguous, stop and ask the user to narrow with `launchCode`, `profileId`, or a stronger selector instead of picking a target silently.
 - If setup is incomplete, explain the missing prerequisite and point to `references/setup.md`.

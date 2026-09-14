@@ -1,7 +1,9 @@
 package launchcode
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -49,6 +51,120 @@ func (s *LaunchServer) handleStopProfile(w http.ResponseWriter, r *http.Request,
 
 	payload := s.profileRuntimePayload(profile)
 	payload["stopped"] = true
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (s *LaunchServer) handleRestartProfile(w http.ResponseWriter, r *http.Request, profileID string) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{
+			"ok":    false,
+			"error": "method not allowed",
+		})
+		return
+	}
+
+	restarter, ok := s.starter.(BrowserRestarter)
+	if !ok {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"ok":    false,
+			"error": "profile runtime control is not available",
+		})
+		return
+	}
+
+	profile, err := restarter.RestartInstance(profileID)
+	if err != nil {
+		writeJSON(w, mapProfileWriteErrorStatus(err), map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	snapshot := s.normalizeRuntimeProfile(profile)
+	if snapshot == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"ok":    false,
+			"error": "profile restart returned nil profile",
+		})
+		return
+	}
+	if snapshot.DebugReady {
+		s.SetActiveProfile(snapshot)
+	} else if !snapshot.Running {
+		s.ClearActiveProfile(snapshot.ProfileId)
+	}
+
+	payload := s.profileRuntimePayload(snapshot)
+	payload["restarted"] = true
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (s *LaunchServer) handleOpenProfileURL(w http.ResponseWriter, r *http.Request, profileID string) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]interface{}{
+			"ok":    false,
+			"error": "method not allowed",
+		})
+		return
+	}
+
+	opener, ok := s.starter.(BrowserURLOpener)
+	if !ok {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"ok":    false,
+			"error": "profile runtime control is not available",
+		})
+		return
+	}
+
+	var req struct {
+		URL string `json:"url"`
+	}
+	if r.Body != nil {
+		dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil && err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"ok":    false,
+				"error": "invalid request body",
+			})
+			return
+		}
+	}
+
+	targetURL := strings.TrimSpace(req.URL)
+	if targetURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"ok":    false,
+			"error": "url is required",
+		})
+		return
+	}
+
+	opened, err := opener.OpenInstanceURL(profileID, targetURL)
+	if err != nil {
+		writeJSON(w, mapProfileWriteErrorStatus(err), map[string]interface{}{
+			"ok":    false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	profile, _, _ := s.statusProfile(profileID)
+	payload := map[string]interface{}{
+		"ok":        true,
+		"opened":    opened,
+		"url":       targetURL,
+		"profileId": profileID,
+	}
+	if profile != nil {
+		for key, value := range s.profileRuntimePayload(profile) {
+			payload[key] = value
+		}
+		payload["opened"] = opened
+		payload["url"] = targetURL
+	}
 	writeJSON(w, http.StatusOK, payload)
 }
 

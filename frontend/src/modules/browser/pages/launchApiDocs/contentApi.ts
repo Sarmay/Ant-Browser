@@ -25,6 +25,12 @@ export const DOC_API_PROFILES_LAUNCH = `# 实例与启动
 | \`DELETE\` | \`/api/profiles/{profileId}\` | 删除实例 |
 | \`GET\` | \`/api/profiles/{profileId}/status\` | 查实例运行态 |
 | \`POST\` | \`/api/profiles/{profileId}/stop\` | 停止实例 |
+| \`POST\` | \`/api/profiles/{profileId}/copy\` | 复制实例 |
+| \`POST\` | \`/api/profiles/copy\` | 按 selector / launchCode 复制 |
+| \`POST\` | \`/api/profiles/{profileId}/restart\` | 重启实例 |
+| \`POST\` | \`/api/profiles/{profileId}/open-url\` | 在运行中实例打开页面 |
+| \`GET\` | \`/api/profiles/{profileId}/cookies\` | 导出 Cookie |
+| \`PUT\` | \`/api/profiles/{profileId}/cookies\` | 导入 Cookie |
 
 ## 创建实例
 
@@ -125,24 +131,48 @@ curl -X POST http://127.0.0.1:19876/api/launch \\
 }
 \`\`\`
 
-## 单实例状态 / 停止
+## 单实例状态 / 停止 / 重启 / 打开页面 / Cookie
 
 | 方法 | 路径 | 示例用途 |
 |------|------|----------|
 | \`GET\` | \`/api/profiles/{profileId}/status\` | 查实例是否运行、是否 ready |
 | \`POST\` | \`/api/profiles/{profileId}/stop\` | 任务完成后精确停止 |
+| \`POST\` | \`/api/profiles/{profileId}/restart\` | 停止后立刻再启动 |
+| \`POST\` | \`/api/profiles/{profileId}/open-url\` | 运行中实例打开网址 |
+| \`GET\` | \`/api/profiles/{profileId}/cookies\` | 导出 Cookie |
+| \`PUT\` | \`/api/profiles/{profileId}/cookies\` | 导入 Cookie |
 
 ## 复制实例
 
-Launch API **没有** \`POST /api/profiles/{profileId}/copy\`。
+\`\`\`bash
+curl -X POST http://127.0.0.1:19876/api/profiles/550e8400-e29b-41d4-a716-446655440000/copy \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "profileName": "task-001",
+    "mode": "auto_fingerprint",
+    "automationTargets": ["seed"]
+  }'
+\`\`\`
+
+空请求体合法。默认 \`auto_fingerprint\`，只重生成指纹种子。\`mode=regular\` 会和源实例共用同一套指纹。
+
+\`proxyId\` / \`proxyConfig\` 省略时跟随源实例。只改代理时：
+
+\`\`\`bash
+curl -X POST http://127.0.0.1:19876/api/profiles/copy \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "selector": { "code": "MAIN_001" },
+    "profileName": "task-001",
+    "proxyConfig": "http://127.0.0.1:7890"
+  }'
+\`\`\`
 
 | 需求 | 做法 |
 |------|------|
 | 应用内复制 | 实例列表 -> 复制 |
-| 脚本自动复制主实例 | \`targetConfig.mode = "create"\` 或 Hook \`instance.type = "create"\` |
-| 外部自己建号 | \`GET\` 源实例后 \`POST /api/profiles\`，拷代理 / 内核 / 启动参数，**不要**原样拷 \`fingerprintArgs\` |
-
-\`POST /api/profiles\` 省略 \`fingerprintArgs\` 时使用全局默认指纹，接近脚本 \`Copy()\`。把源实例的 \`--fingerprint=\` 一起写回去，多个号会共用同一指纹。
+| 外部自己建号 | \`POST /api/profiles/{profileId}/copy\` |
+| 脚本自动复制主实例再跑页面 | \`targetConfig.mode = "create"\` 或 Hook \`instance.type = "create"\` |
 
 复制只拷配置，不拷 Cookie 和用户数据目录。要带走登录态用导出 ZIP。完整说明见 \`复制实例\`。
 
@@ -156,8 +186,32 @@ matchMode=all 只在 POST /api/launch 可用
 proxyId 和 proxyConfig 同时传 -> 优先 proxyId
 proxyId 无效 + proxyConfig 非空 -> 使用 proxyConfig
 proxyId 无效 + proxyConfig 为空 -> 400
-没有 copy 接口；create 脚本才会走应用内 Copy()
+copy 默认 auto_fingerprint，只重生成指纹种子
+copy 可设 proxyId / proxyConfig，省略则跟随源实例
+脚本 create 走 Copy()，指纹换成全局默认
+open-url / cookies 要求实例已经 running
 \`\`\`
+`
+
+export const DOC_API_CATALOG = `# 代理 / 分组 / 内核
+
+只读目录，给外部编排在创建或复制实例时选 ID。不提供测速、下载或写操作。
+
+## 接口
+
+| 方法 | 路径 | 用途 |
+|------|------|------|
+| \`GET\` | \`/api/proxies\` | 列代理池节点 |
+| \`GET\` | \`/api/groups\` | 列实例分组 |
+| \`GET\` | \`/api/cores\` | 列可用内核 |
+
+\`\`\`bash
+curl http://127.0.0.1:19876/api/proxies
+curl http://127.0.0.1:19876/api/groups
+curl http://127.0.0.1:19876/api/cores
+\`\`\`
+
+创建或复制时优先传 \`proxyId\` / \`groupId\` / \`coreId\`。自定义代理传 \`proxyConfig\`，不要自己拼指纹参数。
 `
 
 export const DOC_API_RUNTIME = `# 运行态与接管
@@ -270,6 +324,7 @@ export const DOC_API_AUTOMATION = `# 脚本自动化
 | \`GET\` | \`/api/automation/scripts/{scriptId}\` | 查单个脚本详情 |
 | \`POST\` | \`/api/automation/scripts/run\` | 执行脚本 |
 | \`GET\` | \`/api/automation/scripts/runs\` | 查运行记录 |
+| \`GET\` | \`/api/automation/scripts/runs/{runId}\` | 查单次运行记录 |
 | \`POST\` | \`/api/automation/hooks/{hookPath}\` | 调用脚本公开 Hook |
 
 ## 列脚本
@@ -345,6 +400,8 @@ curl -X POST http://127.0.0.1:19876/api/automation/scripts/run \\
 
 \`timeoutMs\` 默认 5 分钟，合法范围 1000–1800000（30 分钟）。\`timeoutMs=0\` 表示用默认值。
 
+长任务加 \`"async": true\`，会立刻返回 \`202\` 和 \`run.id\`，再用 \`GET /api/automation/scripts/runs/{runId}\` 轮询，直到 \`status\` 为 \`success\` 或 \`failed\`。
+
 ## 查运行记录
 
 \`\`\`bash
@@ -397,6 +454,7 @@ curl -X POST http://127.0.0.1:19876/api/automation/hooks/your-hook-path \\
 
 \`\`\`text
 scriptId 必填
+async=true 返回 202，再用 runs/{runId} 轮询
 推荐优先使用 selector.code，而不是 profileId
 selector / params / targetInput 必须是 JSON object
 不传 selector / params 时，默认沿用脚本内配置

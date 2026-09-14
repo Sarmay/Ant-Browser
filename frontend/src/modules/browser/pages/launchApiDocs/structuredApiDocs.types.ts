@@ -3,6 +3,7 @@
 export type StructuredApiSectionId =
   | 'api-system'
   | 'api-profiles-launch'
+  | 'api-catalog'
   | 'api-runtime'
   | 'api-automation'
 
@@ -15,8 +16,17 @@ export type StructuredApiDocId =
   | 'api-profiles-get-detail'
   | 'api-profiles-update-detail'
   | 'api-profiles-delete-detail'
+  | 'api-profiles-copy-detail'
+  | 'api-profiles-copy-selector-detail'
   | 'api-profiles-status-detail'
   | 'api-profiles-stop-detail'
+  | 'api-profiles-restart-detail'
+  | 'api-profiles-open-url-detail'
+  | 'api-profiles-cookies-get-detail'
+  | 'api-profiles-cookies-put-detail'
+  | 'api-catalog-proxies-detail'
+  | 'api-catalog-groups-detail'
+  | 'api-catalog-cores-detail'
   | 'api-launch-code-detail'
   | 'api-launch-body-detail'
   | 'api-runtime-active-detail'
@@ -30,6 +40,7 @@ export type StructuredApiDocId =
   | 'api-automation-script-detail'
   | 'api-automation-run-detail'
   | 'api-automation-runs-detail'
+  | 'api-automation-run-get-detail'
   | 'api-automation-hook-detail'
 
 export interface StructuredApiExampleContext {

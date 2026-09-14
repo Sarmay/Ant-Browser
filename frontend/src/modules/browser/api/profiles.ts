@@ -302,6 +302,8 @@ export async function copyBrowserProfile(
       [],
       options,
     ),
+    proxyId: options.proxyId?.trim() || (options.proxyConfig?.trim() ? '' : source.proxyId),
+    proxyConfig: options.proxyConfig?.trim() || (options.proxyId?.trim() ? '' : source.proxyConfig),
     launchCode,
     running: false,
     debugReady: false,

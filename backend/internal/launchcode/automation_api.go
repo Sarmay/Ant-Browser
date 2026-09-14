@@ -24,6 +24,7 @@ type automationScriptRunAPIRequest struct {
 	UseScriptSelector *bool           `json:"useScriptSelector"`
 	UseScriptParams   *bool           `json:"useScriptParams"`
 	TimeoutMs         int             `json:"timeoutMs"`
+	Async             bool            `json:"async"`
 }
 
 type automationScriptSummary struct {
@@ -143,9 +144,75 @@ func (s *LaunchServer) handleAutomationScriptRun(w http.ResponseWriter, r *http.
 		return
 	}
 
+	if req.Async {
+		starter, ok := s.starter.(AutomationScriptRunStarter)
+		if !ok {
+			writeAutomationAPIError(w, http.StatusServiceUnavailable, "service_unavailable", "async automation script api is unavailable", "")
+			return
+		}
+		run, err := starter.AutomationScriptStartRun(input)
+		if err != nil {
+			message := strings.TrimSpace(err.Error())
+			if os.IsNotExist(err) || strings.Contains(strings.ToLower(message), "script not found") {
+				writeAutomationAPIError(w, http.StatusNotFound, "not_found", message, "scriptId")
+				return
+			}
+			writeAutomationAPIError(w, http.StatusInternalServerError, "internal_error", message, "")
+			return
+		}
+		writeAutomationAPISuccess(w, http.StatusAccepted, firstNonEmpty(run.Summary, "脚本已开始执行"), automationAPIRunData{
+			Run:     run,
+			Summary: run.Summary,
+		})
+		return
+	}
+
 	run, err := runner.AutomationScriptRunWithOptions(input)
 	if err != nil {
 		writeAutomationAPIError(w, http.StatusInternalServerError, "internal_error", err.Error(), "")
+		return
+	}
+
+	data := automationAPIRunData{
+		Run:     run,
+		Summary: run.Summary,
+	}
+	if result := decodeAutomationRunResult(run.ResultText); result != nil {
+		data.Result = result
+	}
+	writeAutomationAPISuccess(w, http.StatusOK, run.Summary, data)
+}
+
+func (s *LaunchServer) handleAutomationScriptRunByID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAutomationAPIError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed", "")
+		return
+	}
+
+	runID, ok := parseAutomationScriptRunPathID(r.URL.Path)
+	if !ok {
+		writeAutomationAPIError(w, http.StatusNotFound, "not_found", "run not found", "")
+		return
+	}
+
+	getter, ok := s.starter.(AutomationScriptRunGetter)
+	if !ok {
+		writeAutomationAPIError(w, http.StatusServiceUnavailable, "service_unavailable", "automation script api is unavailable", "")
+		return
+	}
+
+	run, err := getter.AutomationScriptRunGet(runID)
+	if err != nil {
+		message := strings.TrimSpace(err.Error())
+		if os.IsNotExist(err) || strings.Contains(strings.ToLower(message), "run not found") {
+			writeAutomationAPIError(w, http.StatusNotFound, "not_found", "run not found", "")
+			return
+		}
+		if strings.Contains(strings.ToLower(message), "run id is invalid") {
+			writeAutomationAPIError(w, http.StatusBadRequest, "invalid_request", message, "runId")
+			return
+		}
+		writeAutomationAPIError(w, http.StatusInternalServerError, "internal_error", message, "")
 		return
 	}
 
@@ -227,6 +294,16 @@ func detailAutomationScript(record automation.ScriptRecord) automationScriptDeta
 
 func parseAutomationScriptPathID(path string) (string, bool) {
 	path = strings.TrimPrefix(path, "/api/automation/scripts/")
+	path = strings.Trim(path, "/")
+	path = strings.TrimSpace(path)
+	if path == "" || strings.Contains(path, "/") {
+		return "", false
+	}
+	return path, true
+}
+
+func parseAutomationScriptRunPathID(path string) (string, bool) {
+	path = strings.TrimPrefix(path, "/api/automation/scripts/runs/")
 	path = strings.Trim(path, "/")
 	path = strings.TrimSpace(path)
 	if path == "" || strings.Contains(path, "/") {

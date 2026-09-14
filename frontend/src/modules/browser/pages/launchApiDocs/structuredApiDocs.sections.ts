@@ -16,9 +16,19 @@ export const STRUCTURED_API_SECTION_DOCS: StructuredApiSectionDoc[] = [
     title: '实例与启动',
     intro: '这页只做实例管理和启动能力的总览。先通过实例接口完成配置，再按 launchCode 或 selector 启动实例。',
     highlights: [
-      '/api/profiles 负责实例增删改查。',
+      '/api/profiles 负责实例增删改查、复制、重启和打开页面。',
       '/api/launch 负责启动。',
       '详情只从表格里的“查看详情”进入。',
+    ],
+  },
+  {
+    id: 'api-catalog',
+    title: '代理 / 分组 / 内核',
+    intro: '只读目录，给外部编排在创建或复制实例时选择 proxyId、groupId、coreId。',
+    highlights: [
+      '/api/proxies 返回代理池节点。',
+      '/api/groups 返回实例分组。',
+      '/api/cores 返回可用内核。',
     ],
   },
   {

@@ -67,29 +67,23 @@ curl -X POST http://127.0.0.1:19876/api/automation/hooks/your-hook-path \\
 
 \`POST /api/automation/scripts/run\` 也可以传 \`targetInput\`，覆盖脚本里保存的模板选择器或名称模板。
 
-## HTTP 没有 copy 接口
+## HTTP 复制实例
 
-当前 Launch API **没有** \`POST /api/profiles/{profileId}/copy\`。
+\`\`\`text
+POST /api/profiles/{profileId}/copy
+\`\`\`
 
-外部 Node 只能近似复制：先读源实例，再创建新实例，**不要原样拷** \`fingerprintArgs\`。
+走应用内 \`CopyWithOptions()\`，和 UI「配置复制」同一套逻辑：拷内核、代理、分组、标签、关键字、启动参数、会话恢复设置；新实例使用新的 \`profileId\` / \`userDataDir\` / \`launchCode\`。不拷 Cookie、登录态和用户数据目录。
+
+空请求体合法。默认 \`mode=auto_fingerprint\`，默认只重生成指纹种子。
 
 \`\`\`bash
-# 1. 读主实例
-curl http://127.0.0.1:19876/api/profiles/SOURCE_PROFILE_ID
-
-# 2. 创建新实例：拷代理 / 内核 / 启动参数，省略 fingerprintArgs
-curl -X POST http://127.0.0.1:19876/api/profiles \\
+curl -X POST http://127.0.0.1:19876/api/profiles/SOURCE_PROFILE_ID/copy \\
   -H "Content-Type: application/json" \\
   -d '{
-    "profile": {
-      "profileName": "task-001",
-      "coreId": "<source-core-id>",
-      "proxyId": "<source-proxy-id>",
-      "launchArgs": ["--disable-sync", "--no-first-run"],
-      "tags": ["task"],
-      "keywords": ["task-001"],
-      "groupId": "<source-group-id>"
-    },
+    "profileName": "task-001",
+    "mode": "auto_fingerprint",
+    "automationTargets": ["seed"],
     "autoLaunch": true,
     "start": {
       "skipDefaultStartUrls": true
@@ -97,15 +91,60 @@ curl -X POST http://127.0.0.1:19876/api/profiles \\
   }'
 \`\`\`
 
-省略 \`fingerprintArgs\` 时，新实例使用全局默认指纹，效果接近脚本 \`Copy()\`。如果把源实例的 \`--fingerprint=...\` 一起 POST 回去，多个号会共用同一指纹。
+\`\`\`json
+{
+  "ok": true,
+  "created": true,
+  "copied": true,
+  "launched": true,
+  "profileId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "profileName": "task-001",
+  "launchCode": "K2M9QX",
+  "sourceProfileId": "SOURCE_PROFILE_ID",
+  "debugReady": true,
+  "cdpUrl": "http://127.0.0.1:19876"
+}
+\`\`\`
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| \`profileName\` | 源名称（副本）时间戳 | 新实例显示名 |
+| \`mode\` | \`auto_fingerprint\` | \`regular\` 会原样保留源指纹，多号隔离不要用 |
+| \`automationTargets\` | \`["seed"]\` | 仅 \`auto_fingerprint\` 生效：\`seed / identity / locale / screen / hardware / network\` |
+| \`launchCode\` | 自动生成 | 4–32 位 \`A-Z 0-9 _ -\` |
+| \`autoLaunch\` | \`false\` | 复制后立即启动 |
+| \`start\` | 无 | 仅 \`autoLaunch=true\` 时生效 |
+| \`proxyId\` | 跟随源实例 | 新实例使用代理池节点 |
+| \`proxyConfig\` | 跟随源实例 | 新实例使用自定义代理；\`proxyId\` 有效时优先代理池 |
+
+只有 launchCode 时：
+
+\`\`\`bash
+curl -X POST http://127.0.0.1:19876/api/profiles/copy \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "selector": { "code": "MAIN_001" },
+    "profileName": "task-001",
+    "proxyConfig": "http://127.0.0.1:7890"
+  }'
+\`\`\`
+
+HTTP copy 和脚本 \`create\` 的指纹处理不一样：
+
+| 入口 | 指纹结果 |
+|------|----------|
+| HTTP copy / UI 复制 | 默认只换指纹种子，其它指纹参数跟着源实例 |
+| 脚本 \`Copy()\` | 指纹参数整份替换成全局默认 |
+
+不要用 \`GET\` 源实例再 \`POST /api/profiles\` 自己拼复制。那样容易把 \`--fingerprint=\` 原样写回去，多个号会撞指纹。
 
 ## 怎么选
 
 | 场景 | 用法 |
 |------|------|
 | 应用里手动开一个新号 | 实例列表 -> 复制，默认 \`auto_fingerprint\` |
+| 外部自己管实例生命周期 | \`POST /api/profiles/{profileId}/copy\` 或 \`POST /api/profiles/copy\` |
 | 脚本自动「复制主实例再打开网页」 | \`targetConfig.mode = "create"\` |
 | 外部编排只负责调脚本 | Hook \`instance.type = "create"\` |
-| 外部自己管实例生命周期 | \`GET\` 源实例 + \`POST /api/profiles\`，不要拷指纹种子 |
 | 要把登录态一起带走 | 导出 ZIP，不要复制 |
 `

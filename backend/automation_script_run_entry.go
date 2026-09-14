@@ -3,11 +3,14 @@ package backend
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"ant-chrome/backend/internal/automation"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -32,9 +35,70 @@ func (a *App) AutomationScriptRun(scriptID string) (*automation.ScriptRunRecord,
 	})
 }
 
+func (a *App) AutomationScriptRunGet(runID string) (*automation.ScriptRunRecord, error) {
+	record, err := a.automationScriptRunStore().Get(runID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("run not found")
+		}
+		return nil, err
+	}
+	return &record, nil
+}
+
+func (a *App) AutomationScriptStartRun(input automation.ScriptRunRequest) (*automation.ScriptRunRecord, error) {
+	scriptID := strings.TrimSpace(input.ScriptID)
+	if scriptID == "" {
+		return nil, fmt.Errorf("scriptId is required")
+	}
+
+	store := a.automationScriptStore()
+	if err := a.ensureAutomationScriptDefaults(store); err != nil {
+		return nil, err
+	}
+	script, err := store.Get(scriptID)
+	if err != nil {
+		return nil, err
+	}
+
+	startedAt := time.Now()
+	pending := automation.ScriptRunRecord{
+		ID:         uuid.NewString(),
+		ScriptID:   script.ID,
+		ScriptName: script.Name,
+		ScriptType: script.Type,
+		Status:     "running",
+		Summary:    "脚本执行中",
+		StartedAt:  startedAt.Format(time.RFC3339),
+	}
+	saved, err := a.automationScriptRunStore().Save(pending)
+	if err != nil {
+		return nil, err
+	}
+
+	input.RunID = saved.ID
+	go func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				failed := saved
+				failed.Status = "failed"
+				failed.Summary = "脚本执行失败"
+				failed.Error = fmt.Sprintf("%v", recovered)
+				failed.FinishedAt = time.Now().Format(time.RFC3339)
+				failed.DurationMs = time.Since(startedAt).Milliseconds()
+				_, _ = a.automationScriptRunStore().Save(failed)
+			}
+		}()
+		_, _ = a.AutomationScriptRunWithOptions(input)
+	}()
+
+	return &saved, nil
+}
+
 func (a *App) AutomationScriptRunWithOptions(input automation.ScriptRunRequest) (*automation.ScriptRunRecord, error) {
 	startedAt := time.Now()
 	run := automation.ScriptRunRecord{
+		ID:        strings.TrimSpace(input.RunID),
 		ScriptID:  strings.TrimSpace(input.ScriptID),
 		Status:    "failed",
 		StartedAt: startedAt.Format(time.RFC3339),
