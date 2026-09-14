@@ -11,6 +11,8 @@ import {
 } from './contentIntro'
 import { DOC_CHANGELOG } from './contentChangelog'
 import { DOC_SCRIPT_DEV } from './contentScriptDev'
+import { DOC_COPY_INSTANCE } from './contentCopy'
+import { DOC_SCRIPT_VS_NODE } from './contentScriptVsNode'
 import {
   DOC_API_AUTOMATION,
   DOC_API_PROFILES_LAUNCH,
@@ -53,10 +55,22 @@ export const DOC_GROUPS: LaunchDocGroup[] = [
         content: DOC_TUTORIAL,
       },
       {
+        id: 'tutorial-copy-instance',
+        label: '复制实例',
+        summary: '从主实例复制新号：UI 复制、脚本 create、HTTP 近似做法。',
+        content: DOC_COPY_INSTANCE,
+      },
+      {
         id: 'tutorial-script-dev',
         label: '内置脚本开发',
-        summary: '自动化脚本包结构、Runner 上下文与核心 API 参考。',
+        summary: '脚本包结构、目标策略、Runner API、超时和产物。',
         content: DOC_SCRIPT_DEV,
+      },
+      {
+        id: 'tutorial-script-vs-node',
+        label: '内置脚本与外部 Node',
+        summary: '页面脚本和外部编排怎么分工，以及不要自己 launch Chromium。',
+        content: DOC_SCRIPT_VS_NODE,
       },
       {
         id: 'tutorial-skill',

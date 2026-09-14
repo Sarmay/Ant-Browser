@@ -39,7 +39,7 @@ durationMs
 | \`405\` | 方法不对 | 检查 GET / POST |
 | \`409\` | 多命中 / launchCode 冲突 | 收窄 selector 或换 launchCode |
 | \`500\` | 启动或脚本执行失败 | 看 \`/api/launch/logs\` 和应用日志 |
-| \`503\` | 当前没有活动实例或能力没就绪 | 先查 \`/api/runtime/active\` |
+| \`503\` | 当前没有活动实例或能力没就绪 | 先查 \`/api/runtime/active\`；根路径 \`/\` 在没有活动调试目标时也会 503 |
 
 ## 看到这些错误时
 

@@ -1,5 +1,13 @@
 export const DOC_CHANGELOG = `# 更新日志
 
+## 1.5.3 - 2026-09-14
+
+- 新增「复制实例」：说明 UI 复制、脚本 \`create\`、以及 HTTP 没有 copy 接口时怎么近似创建。
+- 新增「内置脚本与外部 Node」：页面脚本和外部编排的分工，以及不要自己 launch Chromium。
+- 补齐「内置脚本开发」：\`targetConfig.mode\`、超时、产物、拟人化输入、脚本包不能带 \`node_modules\`。
+- 补齐实例与脚本接口说明：\`targetInput\`、Hook \`instance.type=create\`、\`timeoutMs\` 范围。
+- 应用版本升级到 1.5.3。
+
 ## 1.5.2 - 2026-08-21
 
 - 自动化脚本：修复内置 demo 脚本自动加载展示问题，恢复种子导入和迁移。

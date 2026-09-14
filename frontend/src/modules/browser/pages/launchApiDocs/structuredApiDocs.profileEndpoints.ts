@@ -140,6 +140,7 @@ export const PROFILE_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
       'start 仅在 autoLaunch=true 时生效；成功响应的 profile 是完整实例快照。',
       'profile.proxyId 与 profile.proxyConfig 同时传时，优先使用 proxyId 对应的代理池节点。',
       '若 proxyId 无效：提供 proxyConfig 则按自定义代理保存；未提供 proxyConfig 则返回 400。',
+      '没有 copy 接口。从主实例开新号请用应用内复制、脚本 targetConfig.mode=create，或本接口创建时省略 fingerprintArgs（使用全局默认指纹）。不要把源实例的 --fingerprint= 原样写回来。',
     ],
   },
   {

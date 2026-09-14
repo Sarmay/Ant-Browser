@@ -132,6 +132,20 @@ curl -X POST http://127.0.0.1:19876/api/launch \\
 | \`GET\` | \`/api/profiles/{profileId}/status\` | 查实例是否运行、是否 ready |
 | \`POST\` | \`/api/profiles/{profileId}/stop\` | 任务完成后精确停止 |
 
+## 复制实例
+
+Launch API **没有** \`POST /api/profiles/{profileId}/copy\`。
+
+| 需求 | 做法 |
+|------|------|
+| 应用内复制 | 实例列表 -> 复制 |
+| 脚本自动复制主实例 | \`targetConfig.mode = "create"\` 或 Hook \`instance.type = "create"\` |
+| 外部自己建号 | \`GET\` 源实例后 \`POST /api/profiles\`，拷代理 / 内核 / 启动参数，**不要**原样拷 \`fingerprintArgs\` |
+
+\`POST /api/profiles\` 省略 \`fingerprintArgs\` 时使用全局默认指纹，接近脚本 \`Copy()\`。把源实例的 \`--fingerprint=\` 一起写回去，多个号会共用同一指纹。
+
+复制只拷配置，不拷 Cookie 和用户数据目录。要带走登录态用导出 ZIP。完整说明见 \`复制实例\`。
+
 ## 记住这几个规则
 
 \`\`\`text
@@ -142,6 +156,7 @@ matchMode=all 只在 POST /api/launch 可用
 proxyId 和 proxyConfig 同时传 -> 优先 proxyId
 proxyId 无效 + proxyConfig 非空 -> 使用 proxyConfig
 proxyId 无效 + proxyConfig 为空 -> 400
+没有 copy 接口；create 脚本才会走应用内 Copy()
 \`\`\`
 `
 
@@ -310,6 +325,26 @@ curl -X POST http://127.0.0.1:19876/api/automation/scripts/run \\
   }'
 \`\`\`
 
+覆盖 \`create\` 模板：
+
+\`\`\`bash
+curl -X POST http://127.0.0.1:19876/api/automation/scripts/run \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "scriptId": "my-script",
+    "targetInput": {
+      "templateSelector": { "code": "MAIN_001" },
+      "createNameTemplate": "task-001"
+    },
+    "params": {
+      "url": "https://example.com"
+    },
+    "timeoutMs": 300000
+  }'
+\`\`\`
+
+\`timeoutMs\` 默认 5 分钟，合法范围 1000–1800000（30 分钟）。\`timeoutMs=0\` 表示用默认值。
+
 ## 查运行记录
 
 \`\`\`bash
@@ -337,15 +372,37 @@ curl -X POST http://127.0.0.1:19876/api/automation/hooks/image/chatgpt-generate-
 
 - 不传 \`instance\` 时沿用脚本默认目标
 - \`instance.type\` 支持 \`script-default / existing / rotate / create\`
+- \`create\` 必须带 \`instance.templateSelector\`，会复制主实例后再执行
 - Hook 执行失败也可能返回 HTTP 200，必须同时检查响应里的 \`ok\` 与 \`status\`
+
+按模板新建再跑脚本：
+
+\`\`\`bash
+curl -X POST http://127.0.0.1:19876/api/automation/hooks/your-hook-path \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "instance": {
+      "type": "create",
+      "templateSelector": { "code": "MAIN_001" },
+      "createNameTemplate": "task-\${timestamp}"
+    },
+    "params": {
+      "url": "https://example.com"
+    },
+    "timeoutMs": 300000
+  }'
+\`\`\`
 
 ## 记住这几个规则
 
 \`\`\`text
 scriptId 必填
 推荐优先使用 selector.code，而不是 profileId
-selector / params 必须是 JSON object
-targetInput 必须是 JSON object
+selector / params / targetInput 必须是 JSON object
 不传 selector / params 时，默认沿用脚本内配置
+timeoutMs 默认 5 分钟，上限 30 分钟
+create 会 Copy() 主实例：拷配置、不拷 Cookie、指纹用全局默认
+脚本包不能带 node_modules
+不要只看 HTTP 200，要看 ok 和 status
 \`\`\`
 `

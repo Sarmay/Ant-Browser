@@ -18,6 +18,8 @@
 4. 需要固定插件时，打开 \`指纹浏览器 > 插件包管理\` 安装或导入插件
 5. 打开 \`指纹浏览器 > 实例列表\`，新建实例并按需配置插件
 6. 保存后直接启动
+7. 需要「主实例当模板、每次开新号」时，看 \`复制实例\`
+8. 页面自动化写内置脚本；邮箱 API / 批次 / 重试用外部 Node 调脚本接口，看 \`内置脚本与外部 Node\`
 
 ## 实例迁移
 
@@ -76,6 +78,8 @@ const browser = await chromium.connectOverCDP(data.cdpUrl);
 \`\`\`
 
 需要稳定接管时，不要自己轮询，直接用 \`POST /api/runtime/session\`。
+
+外部 Node 不要 \`chromium.launch()\`。指纹和代理只在 Ant Browser 启动的实例上生效。复制新号、脚本超时、和内置脚本怎么分工，见后面的 \`复制实例\`、\`内置脚本开发\`、\`内置脚本与外部 Node\`。
 `
 
 export const DOC_OPERATION_FLOW = `# 操作流程
@@ -87,8 +91,10 @@ export const DOC_OPERATION_FLOW = `# 操作流程
 2. 代理池配置：导入或录入代理
 3. 插件包管理：安装插件，按需限制实例
 4. 实例列表：创建实例并选择内核、代理、分组
-5. 启动实例：确认 debugReady 后再接管
-6. 迁移实例：停止实例后导出 ZIP，新环境中导入为新实例
+5. 需要模板号时：复制主实例，或脚本 targetConfig.mode=create
+6. 启动实例：确认 debugReady 后再接管
+7. 页面自动化：写内置脚本；外部 Node 只调脚本接口或 runtime/session
+8. 迁移实例：停止实例后导出 ZIP，新环境中导入为新实例
 \`\`\`
 
 ## 插件接入流程
@@ -458,4 +464,9 @@ curl -H "X-Ant-Api-Key: <your-api-key>" http://127.0.0.1:19876/api/health
 | 需要 ready 后再接管 | \`POST /api/runtime/session\` |
 | 只有 selector，想查状态 | \`POST /api/runtime/status\` |
 | 只有 selector，想停止 | \`POST /api/runtime/stop\` |
+| 从主实例复制新号再跑页面 | 脚本 \`targetConfig.mode=create\`，或 Hook \`instance.type=create\` |
+| 执行已有脚本 | \`POST /api/automation/scripts/run\` |
+| 用稳定路径触发脚本 | \`POST /api/automation/hooks/{hookPath}\` |
+
+Launch API 没有 copy 接口。外部若自己建实例，见 \`复制实例\`。
 `

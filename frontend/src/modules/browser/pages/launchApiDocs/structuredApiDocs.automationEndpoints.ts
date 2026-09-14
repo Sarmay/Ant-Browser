@@ -213,7 +213,9 @@ export const AUTOMATION_API_ENDPOINT_DOCS: StructuredApiEndpointDoc[] = [
       'selector / targetInput / params 必须是 JSON object；请求体最大 1 MiB，未知字段会被拒绝。',
       '不传时沿用脚本默认配置。',
       'useScriptSelector=true 不能同时传 selector；useScriptSelector=false 时必须传 selector。useScriptParams 同理。',
-      'timeoutMs=0 表示使用默认值；非零时必须在 1000–1800000 之间。',
+      'timeoutMs=0 表示使用默认值；非零时必须在 1000–1800000 之间。未传 timeoutMs 时执行层默认 5 分钟。',
+      '脚本 targetConfig.mode=create 时，targetInput 可带 templateSelector、createNameTemplate / profileName，执行前会 Copy() 主实例。',
+      'Launch API 没有独立的实例 copy 接口；需要复制主实例时用脚本 create 或 Hook instance.type=create。',
     ],
   },
   {
