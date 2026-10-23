@@ -99,6 +99,7 @@ export const PLATFORM_VERSION_OPTIONS = [
   { value: '15.6.1', label: 'macOS 15 Sequoia / 15.6.1' },
   { value: '26.0.0', label: 'macOS 26 Tahoe / 26.0.0' },
   { value: '26.4.1', label: 'macOS 26 Tahoe / 26.4.1' },
+  { value: '26.5.0', label: 'macOS 26.5 / 26.5.0' },
 ]
 
 export const FINGERPRINT_PERSONAS: FingerprintPersona[] = [

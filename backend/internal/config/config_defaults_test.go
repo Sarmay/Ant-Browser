@@ -2,6 +2,11 @@ package config
 
 import "testing"
 
+func TestDefaultFingerprintArgsUseMacOSPlatformName(t *testing.T) {
+	args := defaultFingerprintArgsForOS("darwin")
+	assertStringSliceContains(t, args, "--fingerprint-platform=macos")
+}
+
 func TestDefaultFingerprintArgsIncludeEffectiveRuntimeArgs(t *testing.T) {
 	args := defaultFingerprintArgsForOS("windows")
 	assertStringSliceContains(t, args, "--fingerprint-brand=Chrome")

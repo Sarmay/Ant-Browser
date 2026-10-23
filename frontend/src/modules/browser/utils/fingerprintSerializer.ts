@@ -191,7 +191,7 @@ const NO_EFFECT_FINGERPRINT_ARG_KEYS = new Set([
 export function serialize(config: FingerprintConfig): string[] {
   const args: string[] = []
   if (config.seed) args.push(`--fingerprint=${config.seed}`)
-  if (config.brand) args.push(`--fingerprint-brand=${config.brand}`)
+  if (config.brand) args.push(`--fingerprint-brand=${canonicalFingerprintBrand(config.brand)}`)
   if (config.brandVersion) args.push(`--fingerprint-brand-version=${config.brandVersion}`)
   if (config.platform) args.push(`--fingerprint-platform=${normalizeFingerprintPlatform(config.platform)}`)
   if (config.platformVersion) args.push(`--fingerprint-platform-version=${config.platformVersion}`)
@@ -279,7 +279,107 @@ export function deserialize(args: string[]): FingerprintConfig {
 
 export function normalizeFingerprintPlatform(platform: string): string {
   const normalized = platform.trim().toLowerCase()
-  return normalized === 'mac' ? 'macos' : normalized
+  if (['mac', 'macos', 'darwin', 'macintel', 'osx'].includes(normalized)) return 'macos'
+  if (['win', 'win32', 'win64', 'windows'].includes(normalized)) return 'windows'
+  if (normalized === 'linux' || normalized === 'x11') return 'linux'
+  return normalized
+}
+
+export function canonicalFingerprintBrand(value: string): string {
+  const trimmed = value.trim()
+  const match = Array.from(KERNEL_BRANDS).find(item => item.toLowerCase() === trimmed.toLowerCase())
+  return match || trimmed
+}
+
+export interface HostFingerprintPreset {
+  brand: string
+  brandVersion: string
+  platform: string
+  platformVersion: string
+  language: string
+  acceptLanguage: string
+  timezone: string
+  hardwareConcurrency: string
+}
+
+export function normalizeLocaleTag(value: string): string {
+  const cleaned = value.trim().replace(/_/g, '-').split('.')[0]
+  const parts = cleaned.split('-').map(item => item.trim()).filter(Boolean)
+  if (!parts.length) return ''
+  if (parts.length >= 3 && /^(hans|hant|latn)$/i.test(parts[1]) && /^[a-z]{2}$/i.test(parts[2])) {
+    return `${parts[0].toLowerCase()}-${parts[2].toUpperCase()}`
+  }
+  if (parts.length >= 2 && /^[a-z]{2}$/i.test(parts[1])) {
+    return `${parts[0].toLowerCase()}-${parts[1].toUpperCase()}`
+  }
+  return parts[0].toLowerCase()
+}
+
+export function readLocalScreenWindowSize(): string {
+  if (typeof window === 'undefined' || !window.screen) return ''
+  const width = positiveNumber(window.screen.availWidth) || positiveNumber(window.screen.width)
+  const height = positiveNumber(window.screen.availHeight) || positiveNumber(window.screen.height)
+  if (!width || !height) return ''
+  return `${Math.round(width)},${Math.round(height)}`
+}
+
+export function readLocalHostFingerprint(): HostFingerprintPreset {
+  const language = typeof navigator !== 'undefined' ? normalizeLocaleTag(navigator.language || '') : ''
+  let platform = ''
+  if (typeof navigator !== 'undefined') {
+    const normalized = normalizeFingerprintPlatform(navigator.platform || '')
+    platform = ['windows', 'macos', 'linux'].includes(normalized) ? normalized : ''
+  }
+  return {
+    brand: 'Chrome',
+    brandVersion: '',
+    platform,
+    platformVersion: '',
+    language,
+    acceptLanguage: language ? buildAcceptLanguage(language) : '',
+    timezone: getSystemTimezone(),
+    hardwareConcurrency: typeof navigator !== 'undefined' && navigator.hardwareConcurrency ? String(navigator.hardwareConcurrency) : '',
+  }
+}
+
+function looksLikeIANATimezone(value?: string): boolean {
+  const text = (value || '').trim()
+  return text === 'UTC' || text.includes('/')
+}
+
+export function mergeHostFingerprintPreset(remote?: Partial<HostFingerprintPreset> | null): HostFingerprintPreset {
+  const local = readLocalHostFingerprint()
+  const language = normalizeLocaleTag(remote?.language || local.language)
+  const timezone = looksLikeIANATimezone(remote?.timezone) ? String(remote?.timezone).trim() : local.timezone
+  const platform = normalizeFingerprintPlatform(remote?.platform || local.platform || '')
+  return {
+    brand: canonicalFingerprintBrand(remote?.brand || local.brand || 'Chrome'),
+    brandVersion: String(remote?.brandVersion || local.brandVersion || '').trim(),
+    platform: ['windows', 'macos', 'linux'].includes(platform) ? platform : '',
+    platformVersion: String(remote?.platformVersion || '').trim(),
+    language,
+    acceptLanguage: String(remote?.acceptLanguage || (language ? buildAcceptLanguage(language) : '')).trim(),
+    timezone,
+    hardwareConcurrency: String(remote?.hardwareConcurrency || local.hardwareConcurrency || '').trim(),
+  }
+}
+
+export function buildCurrentDeviceFingerprintConfig(preset: HostFingerprintPreset, windowSize = readLocalScreenWindowSize()): FingerprintConfig {
+  const knownResolution = Boolean(windowSize) && PRESET_RESOLUTIONS.includes(windowSize)
+  return {
+    brand: preset.brand || 'Chrome',
+    brandVersion: preset.brandVersion || undefined,
+    platform: preset.platform || undefined,
+    platformVersion: preset.platformVersion || undefined,
+    lang: preset.language || undefined,
+    acceptLang: preset.acceptLanguage || (preset.language ? buildAcceptLanguage(preset.language) : undefined),
+    timezone: preset.timezone || undefined,
+    resolution: knownResolution ? windowSize : windowSize ? 'custom' : undefined,
+    customResolution: !knownResolution && windowSize ? windowSize : undefined,
+    hardwareConcurrency: preset.hardwareConcurrency || undefined,
+    webrtcPolicy: 'disable_non_proxied_udp',
+    ...EFFECTIVE_RUNTIME_NOISE_CONFIG,
+  }
 }
 
 export function normalizeDisableSpoofing(values?: string[]): string[] {

@@ -1,15 +1,20 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronUp, HelpCircle, RefreshCw } from 'lucide-react'
 import { Button, ConfirmModal, FormItem, Input, Modal, Select, Switch, Textarea } from '../../../shared/components'
+import { fetchHostFingerprintPreset } from '../api'
 import {
   type FingerprintConfig,
+  type HostFingerprintPreset,
   FINGERPRINT_PRESETS,
   PRESET_RESOLUTIONS,
   buildAcceptLanguage,
+  buildCurrentDeviceFingerprintConfig,
   buildFingerprintConfigFromPersona,
   deserialize,
   getSystemTimezone,
+  mergeHostFingerprintPreset,
   randomFingerprintSeed,
+  readLocalScreenWindowSize,
   serialize,
   validateFingerprintArgs,
 } from '../utils/fingerprintSerializer'
@@ -181,6 +186,17 @@ function FingerprintSection({ title, children }: FingerprintSectionProps) {
   )
 }
 
+function prependCurrentOption(options: { value: string; label: string }[], value?: string, label?: string) {
+  const trimmed = (value || '').trim()
+  if (!trimmed || options.some(option => option.value === trimmed)) return options
+  return [{ value: trimmed, label: label || `当前设备 / ${trimmed}` }, ...options]
+}
+
+function resolutionInputValue(config: FingerprintConfig): string {
+  if (config.resolution === 'custom') return config.customResolution ?? ''
+  return config.resolution ?? ''
+}
+
 function EditableOptionInput({ value, onChange, options, placeholder }: EditableOptionInputProps) {
   const [open, setOpen] = useState(false)
   const [focused, setFocused] = useState(false)
@@ -245,6 +261,16 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
   const [advancedHelpOpen, setAdvancedHelpOpen] = useState(false)
   const [confirmSeedOpen, setConfirmSeedOpen] = useState(false)
   const [capabilitiesOpen, setCapabilitiesOpen] = useState(false)
+  const [hostPreset, setHostPreset] = useState<HostFingerprintPreset>(() => mergeHostFingerprintPreset(null))
+  const hostWindowSize = readLocalScreenWindowSize()
+
+  useEffect(() => {
+    let cancelled = false
+    fetchHostFingerprintPreset().then(preset => {
+      if (!cancelled) setHostPreset(mergeHostFingerprintPreset(preset))
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     setConfig(deserialize(value))
@@ -278,6 +304,33 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
     onChange(serialize(parsed))
   }
 
+  const applyCurrentDevice = () => {
+    const next = buildCurrentDeviceFingerprintConfig(hostPreset, hostWindowSize)
+    const merged: FingerprintConfig = {
+      ...next,
+      seed: config.seed,
+      disableSpoofing: config.disableSpoofing,
+      unknownArgs: config.unknownArgs,
+    }
+    setSelectedPresetId('')
+    setSelectedPersonaId('')
+    setConfig(merged)
+    onChange(serialize(merged))
+  }
+
+  const applyResolution = (nextValue: string) => {
+    const value = nextValue.trim()
+    if (!value) {
+      update({ resolution: undefined, customResolution: undefined })
+      return
+    }
+    if (PRESET_RESOLUTIONS.includes(value)) {
+      update({ resolution: value, customResolution: undefined })
+      return
+    }
+    update({ resolution: 'custom', customResolution: value })
+  }
+
   const handlePersonaChange = (personaId: string) => {
     setSelectedPersonaId(personaId)
     if (!personaId) return
@@ -308,6 +361,27 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
   const validationTitle = validation.valid
     ? validation.issues.some(issue => issue.level === 'warning') ? '配置可用，有提示' : '配置有效'
     : '配置需要修正'
+  const brandOptions = prependCurrentOption(BRAND_OPTIONS, hostPreset.brand, `当前设备 / ${hostPreset.brand}`)
+  const brandVersionOptions = prependCurrentOption(BRAND_VERSION_OPTIONS, hostPreset.brandVersion)
+  const platformOptions = prependCurrentOption(PLATFORM_OPTIONS, hostPreset.platform, `当前设备 / ${hostPreset.platform}`)
+  const platformVersionOptions = prependCurrentOption(PLATFORM_VERSION_OPTIONS, hostPreset.platformVersion)
+  const langOptions = prependCurrentOption(LANG_OPTIONS, hostPreset.language, `当前设备 / ${hostPreset.language}`)
+  const acceptLangOptions = prependCurrentOption(ACCEPT_LANG_OPTIONS, hostPreset.acceptLanguage)
+  const timezoneOptions = prependCurrentOption(
+    TIMEZONE_OPTIONS.map(opt => opt.value === 'system' ? { ...opt, label: `跟随系统时区 (当前: ${getSystemTimezone()})` } : opt),
+    hostPreset.timezone,
+    `当前设备 / ${hostPreset.timezone}`,
+  )
+  const resolutionOptions = prependCurrentOption(RESOLUTION_OPTIONS.filter(option => option.value !== 'custom'), hostWindowSize, `当前屏幕 / ${hostWindowSize}`)
+  const hardwareOptions = prependCurrentOption(HARDWARE_CONCURRENCY_OPTIONS, hostPreset.hardwareConcurrency, hostPreset.hardwareConcurrency ? `当前设备 / ${hostPreset.hardwareConcurrency} 核` : '')
+  const currentDeviceSummary = [
+    hostPreset.platform && hostPreset.platformVersion ? `${hostPreset.platform} ${hostPreset.platformVersion}` : hostPreset.platform,
+    hostPreset.language,
+    hostPreset.timezone,
+    hostPreset.hardwareConcurrency ? `${hostPreset.hardwareConcurrency} 核` : '',
+    hostPreset.brandVersion ? `Chrome ${hostPreset.brandVersion}` : hostPreset.brand,
+    hostWindowSize ? `窗口 ${hostWindowSize}` : '',
+  ].filter(Boolean).join(' · ')
 
   return (
     <div className="space-y-4">
@@ -403,39 +477,41 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
             <Select value={selectedPersonaId} onChange={e => handlePersonaChange(e.target.value)} options={PERSONA_OPTIONS} />
           </FormItem>
         </div>
-        <div className="flex justify-end">
-          <Button type="button" variant="secondary" size="sm" onClick={() => setCapabilitiesOpen(true)}>
-            查看能力覆盖
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-[var(--color-text-muted)]">当前设备：{currentDeviceSummary || '读取中'}</p>
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={applyCurrentDevice}>
+              填入当前设备
+            </Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => setCapabilitiesOpen(true)}>
+              查看能力覆盖
+            </Button>
+          </div>
         </div>
       </FingerprintSection>
 
       <FingerprintSection title="身份与定位">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="浏览器品牌">
-            <Select value={config.brand ?? ''} onChange={e => update({ brand: e.target.value || undefined })} options={BRAND_OPTIONS} />
+            <EditableOptionInput value={config.brand ?? ''} onChange={nextValue => update({ brand: nextValue || undefined })} options={brandOptions} placeholder="如 Chrome" />
           </FormItem>
           <FormItem label="品牌版本">
-            <EditableOptionInput value={config.brandVersion ?? ''} onChange={nextValue => update({ brandVersion: nextValue || undefined })} options={BRAND_VERSION_OPTIONS} placeholder="默认跟随内核" />
+            <EditableOptionInput value={config.brandVersion ?? ''} onChange={nextValue => update({ brandVersion: nextValue || undefined })} options={brandVersionOptions} placeholder="默认跟随内核，也可手填" />
           </FormItem>
           <FormItem label="平台">
-            <Select value={config.platform ?? ''} onChange={e => update({ platform: e.target.value || undefined })} options={PLATFORM_OPTIONS} />
+            <EditableOptionInput value={config.platform ?? ''} onChange={nextValue => update({ platform: nextValue || undefined })} options={platformOptions} placeholder="windows / macos / linux" />
           </FormItem>
           <FormItem label="系统版本">
-            <EditableOptionInput value={config.platformVersion ?? ''} onChange={nextValue => update({ platformVersion: nextValue || undefined })} options={PLATFORM_VERSION_OPTIONS} placeholder="如 15.2.0" />
+            <EditableOptionInput value={config.platformVersion ?? ''} onChange={nextValue => update({ platformVersion: nextValue || undefined })} options={platformVersionOptions} placeholder="如 26.5.0" />
           </FormItem>
           <FormItem label="语言">
-            <Select value={config.lang ?? ''} onChange={e => update({ lang: e.target.value || undefined, acceptLang: undefined })} options={LANG_OPTIONS} />
+            <EditableOptionInput value={config.lang ?? ''} onChange={nextValue => update({ lang: nextValue || undefined, acceptLang: undefined })} options={langOptions} placeholder="如 zh-CN" />
           </FormItem>
           <FormItem label="语言列表">
-            <EditableOptionInput value={config.acceptLang ?? ''} onChange={nextValue => update({ acceptLang: nextValue || undefined })} options={ACCEPT_LANG_OPTIONS} placeholder={config.lang ? `默认 ${config.lang.split(/[-_]/)[0] === config.lang ? config.lang : `${config.lang},${config.lang.split(/[-_]/)[0]}`}` : '如 ja-JP,ja'} />
+            <EditableOptionInput value={config.acceptLang ?? ''} onChange={nextValue => update({ acceptLang: nextValue || undefined })} options={acceptLangOptions} placeholder={config.lang ? `默认 ${config.lang.split(/[-_]/)[0] === config.lang ? config.lang : `${config.lang},${config.lang.split(/[-_]/)[0]}`}` : '如 zh-CN,zh'} />
           </FormItem>
           <FormItem label="时区">
-            <Select
-              value={config.timezone ?? ''}
-              onChange={e => update({ timezone: e.target.value || undefined })}
-              options={TIMEZONE_OPTIONS.map(opt => opt.value === 'system' ? { ...opt, label: `跟随系统时区 (当前: ${getSystemTimezone()})` } : opt)}
-            />
+            <EditableOptionInput value={config.timezone ?? ''} onChange={nextValue => update({ timezone: nextValue || undefined })} options={timezoneOptions} placeholder="如 Asia/Shanghai" />
           </FormItem>
         </div>
       </FingerprintSection>
@@ -443,18 +519,13 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
       <FingerprintSection title="设备与网络">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="窗口大小">
-            <Select value={config.resolution ?? ''} onChange={e => update({ resolution: e.target.value || undefined })} options={RESOLUTION_OPTIONS} />
+            <EditableOptionInput value={resolutionInputValue(config)} onChange={applyResolution} options={resolutionOptions} placeholder="宽,高，如 1680,1020" />
           </FormItem>
-          {config.resolution === 'custom' && (
-            <FormItem label="自定义分辨率">
-              <Input value={config.customResolution ?? ''} onChange={e => update({ customResolution: e.target.value || undefined })} placeholder="1920,1080" />
-            </FormItem>
-          )}
           <FormItem label="CPU 核心数">
-            <Select value={config.hardwareConcurrency ?? ''} onChange={e => update({ hardwareConcurrency: e.target.value || undefined })} options={HARDWARE_CONCURRENCY_OPTIONS} />
+            <EditableOptionInput value={config.hardwareConcurrency ?? ''} onChange={nextValue => update({ hardwareConcurrency: nextValue || undefined })} options={hardwareOptions} placeholder="如 8" />
           </FormItem>
           <FormItem label="WebRTC 策略">
-            <Select value={config.webrtcPolicy ?? ''} onChange={e => update({ webrtcPolicy: e.target.value || undefined })} options={WEBRTC_OPTIONS} />
+            <EditableOptionInput value={config.webrtcPolicy ?? ''} onChange={nextValue => update({ webrtcPolicy: nextValue || undefined })} options={WEBRTC_OPTIONS} placeholder="可选择或手填策略名" />
           </FormItem>
         </div>
       </FingerprintSection>
@@ -462,10 +533,10 @@ export function FingerprintPanel({ value, onChange }: FingerprintPanelProps) {
       <FingerprintSection title="兼容伪装">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormItem label="Canvas 噪声">
-            <Select value={config.canvasNoise ?? ''} onChange={e => update({ canvasNoise: e.target.value || undefined })} options={NOISE_OPTIONS} />
+            <EditableOptionInput value={config.canvasNoise ?? ''} onChange={nextValue => update({ canvasNoise: nextValue || undefined })} options={NOISE_OPTIONS} placeholder="1 开启，0 关闭" />
           </FormItem>
           <FormItem label="ClientRects 噪声">
-            <Select value={config.clientRectsNoise ?? ''} onChange={e => update({ clientRectsNoise: e.target.value || undefined })} options={NOISE_OPTIONS} />
+            <EditableOptionInput value={config.clientRectsNoise ?? ''} onChange={nextValue => update({ clientRectsNoise: nextValue || undefined })} options={NOISE_OPTIONS} placeholder="1 开启，0 关闭" />
           </FormItem>
         </div>
 

@@ -585,6 +585,10 @@ export namespace backend {
 	    webdriver: boolean;
 	    screenWidth: number;
 	    screenHeight: number;
+	    availWidth: number;
+	    availHeight: number;
+	    platformVersion: string;
+	    uaFullVersion: string;
 	    colorDepth: number;
 	    innerWidth: number;
 	    innerHeight: number;
@@ -618,6 +622,10 @@ export namespace backend {
 	        this.webdriver = source["webdriver"];
 	        this.screenWidth = source["screenWidth"];
 	        this.screenHeight = source["screenHeight"];
+	        this.availWidth = source["availWidth"];
+	        this.availHeight = source["availHeight"];
+	        this.platformVersion = source["platformVersion"];
+	        this.uaFullVersion = source["uaFullVersion"];
 	        this.colorDepth = source["colorDepth"];
 	        this.innerWidth = source["innerWidth"];
 	        this.innerHeight = source["innerHeight"];
@@ -692,6 +700,32 @@ export namespace backend {
 	        this.httpOnly = source["httpOnly"];
 	        this.secure = source["secure"];
 	        this.sameSite = source["sameSite"];
+	    }
+	}
+	export class HostFingerprintPreset {
+	    brand: string;
+	    brandVersion: string;
+	    platform: string;
+	    platformVersion: string;
+	    language: string;
+	    acceptLanguage: string;
+	    timezone: string;
+	    hardwareConcurrency: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HostFingerprintPreset(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.brand = source["brand"];
+	        this.brandVersion = source["brandVersion"];
+	        this.platform = source["platform"];
+	        this.platformVersion = source["platformVersion"];
+	        this.language = source["language"];
+	        this.acceptLanguage = source["acceptLanguage"];
+	        this.timezone = source["timezone"];
+	        this.hardwareConcurrency = source["hardwareConcurrency"];
 	    }
 	}
 	export class ProfilePackageExportResult {

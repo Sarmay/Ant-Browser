@@ -28,6 +28,10 @@ type BrowserFingerprintRuntimeInfo struct {
 	Webdriver           bool     `json:"webdriver"`
 	ScreenWidth         int      `json:"screenWidth"`
 	ScreenHeight        int      `json:"screenHeight"`
+	AvailWidth          int      `json:"availWidth"`
+	AvailHeight         int      `json:"availHeight"`
+	PlatformVersion     string   `json:"platformVersion"`
+	UAFullVersion       string   `json:"uaFullVersion"`
 	ColorDepth          int      `json:"colorDepth"`
 	InnerWidth          int      `json:"innerWidth"`
 	InnerHeight         int      `json:"innerHeight"`
@@ -244,6 +248,24 @@ func evaluateBrowserFingerprintRuntime(debugPort int) (BrowserFingerprintRuntime
   }
   var gl = document.createElement('canvas').getContext('webgl') || document.createElement('canvas').getContext('experimental-webgl');
   var debug = gl && gl.getExtension('WEBGL_debug_renderer_info');
+  var uaHigh = null;
+  if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+    try {
+      uaHigh = await navigator.userAgentData.getHighEntropyValues(['architecture','bitness','model','platformVersion','uaFullVersion','fullVersionList','wow64']);
+    } catch (e) {
+      uaHigh = null;
+    }
+  }
+  var uaData = navigator.userAgentData ? {
+    brands: navigator.userAgentData.brands || [],
+    mobile: navigator.userAgentData.mobile,
+    platform: navigator.userAgentData.platform || '',
+    platformVersion: uaHigh && uaHigh.platformVersion || '',
+    uaFullVersion: uaHigh && uaHigh.uaFullVersion || '',
+    architecture: uaHigh && uaHigh.architecture || '',
+    bitness: uaHigh && uaHigh.bitness || '',
+    fullVersionList: uaHigh && uaHigh.fullVersionList || []
+  } : null;
   return JSON.stringify({
     language: navigator.language || '',
     languages: Array.prototype.slice.call(navigator.languages || []),
@@ -255,10 +277,14 @@ func evaluateBrowserFingerprintRuntime(debugPort int) (BrowserFingerprintRuntime
     mediaDeviceCount: await mediaDeviceCount(),
     platform: navigator.platform || '',
     userAgent: navigator.userAgent || '',
-    userAgentData: navigator.userAgentData ? JSON.stringify({brands: navigator.userAgentData.brands || [], mobile: navigator.userAgentData.mobile, platform: navigator.userAgentData.platform || ''}) : '',
+    userAgentData: uaData ? JSON.stringify(uaData) : '',
+    platformVersion: uaHigh && uaHigh.platformVersion || '',
+    uaFullVersion: uaHigh && uaHigh.uaFullVersion || '',
     webdriver: navigator.webdriver === true,
     screenWidth: screen.width || 0,
     screenHeight: screen.height || 0,
+    availWidth: screen.availWidth || 0,
+    availHeight: screen.availHeight || 0,
     colorDepth: screen.colorDepth || 0,
     innerWidth: window.innerWidth || 0,
     innerHeight: window.innerHeight || 0,
@@ -278,7 +304,7 @@ func evaluateBrowserFingerprintRuntime(debugPort int) (BrowserFingerprintRuntime
 		"expression":    expression,
 		"returnByValue": true,
 		"awaitPromise":  true,
-		"timeout":       3000,
+		"timeout":       8000,
 	})
 	if err != nil {
 		return BrowserFingerprintRuntimeInfo{}, fmt.Errorf("指纹自测失败: %w", err)

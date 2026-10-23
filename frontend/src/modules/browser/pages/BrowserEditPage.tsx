@@ -3,9 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronDown, ChevronUp, FolderOpen, HelpCircle, Layers, ShieldCheck } from 'lucide-react'
 import { Button, Card, ConfirmModal, FormItem, Input, Modal, Select, Textarea, toast } from '../../../shared/components'
 import type { BrowserCore, BrowserFingerprintCapabilityReport, BrowserFingerprintCapabilityRow, BrowserFingerprintCheckResult, BrowserProfileInput, BrowserProxy, BrowserGroup, ProxyLocationResolveResult } from '../types'
-import { browserProxyResolveLocation, checkBrowserProfileFingerprint, createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfileFingerprintMatrix, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, openBrowserFingerprintCheck, openUserDataDir, updateBrowserProfile, validateProxyConfig } from '../api'
+import { browserProxyResolveLocation, checkBrowserProfileFingerprint, createBrowserProfile, fetchAllTags, fetchBrowserCores, fetchBrowserProfileFingerprintMatrix, fetchBrowserProfiles, fetchBrowserProxies, fetchBrowserSettings, fetchGroups, fetchHostFingerprintPreset, openBrowserFingerprintCheck, openUserDataDir, updateBrowserProfile, validateProxyConfig } from '../api'
 import { FingerprintPanel } from '../components/FingerprintPanel'
-import { applyLocaleToFingerprintArgs, validateFingerprintArgs, withAdaptiveDefaultWindowSize } from '../utils/fingerprintSerializer'
+import { applyLocaleToFingerprintArgs, buildCurrentDeviceFingerprintConfig, mergeHostFingerprintPreset, serialize, validateFingerprintArgs, withAdaptiveDefaultWindowSize } from '../utils/fingerprintSerializer'
 import { TagInput } from '../components/TagInput'
 import { GroupSelector } from '../components/GroupSelector'
 import { ProxyPickerModal } from '../components/ProxyPickerModal'
@@ -39,8 +39,8 @@ function displayValue(value: unknown): string {
   return String(value)
 }
 
-type FingerprintMatchMode = 'exact' | 'contains' | 'platform' | 'browser-version' | 'platform-version' | 'display'
-type FingerprintMatchStatus = 'match' | 'version_compatible' | 'mismatch' | 'not_configured' | 'observe'
+type FingerprintMatchMode = 'exact' | 'contains' | 'platform' | 'browser-version' | 'platform-version' | 'display' | 'window'
+type FingerprintMatchStatus = 'match' | 'version_compatible' | 'screen_fit' | 'mismatch' | 'not_configured' | 'observe'
 
 function normalizeFingerprintPlatformForMatch(value: unknown): string {
   const normalized = String(value ?? '').trim().toLowerCase()
@@ -83,6 +83,17 @@ function matchPlatformVersionStatus(expected: unknown, actual: unknown): Fingerp
   return versions.some(actualParts => sameVersionPrefix(expectedParts, actualParts)) ? 'version_compatible' : 'mismatch'
 }
 
+function matchWindowStatus(expected: unknown, actual: unknown, screenWidth: number, screenHeight: number): FingerprintMatchStatus {
+  if (expected === undefined || expected === null || expected === '') return 'not_configured'
+  if (String(expected) === String(actual)) return 'match'
+  const [expectedWidth, expectedHeight] = String(expected).split(',').map(item => Number.parseInt(item, 10))
+  const [actualWidth, actualHeight] = String(actual).split(',').map(item => Number.parseInt(item, 10))
+  if (expectedWidth > 0 && expectedHeight > 0 && actualWidth > 0 && actualHeight > 0 && screenWidth > 0 && screenHeight > 0 && expectedWidth >= screenWidth && expectedHeight >= screenHeight && Math.abs(actualWidth - screenWidth) <= 16 && Math.abs(actualHeight - screenHeight) <= 16) {
+    return 'screen_fit'
+  }
+  return 'mismatch'
+}
+
 function matchStatus(expected: unknown, actual: unknown, mode: FingerprintMatchMode = 'exact'): FingerprintMatchStatus {
   if (mode === 'display') return 'observe'
   if (expected === undefined || expected === null || expected === '') return 'not_configured'
@@ -102,10 +113,10 @@ function matchStatus(expected: unknown, actual: unknown, mode: FingerprintMatchM
   return String(expected) === String(actual) ? 'match' : 'mismatch'
 }
 
-function FingerprintCheckRow({ label, expected, actual, mode }: { label: string; expected?: unknown; actual: unknown; mode?: FingerprintMatchMode }) {
-  const status = matchStatus(expected, actual, mode)
-  const statusText = status === 'match' ? '一致' : status === 'version_compatible' ? '口径匹配' : status === 'mismatch' ? '不一致' : status === 'not_configured' ? '未设期望' : '观察值'
-  const statusClass = status === 'match' || status === 'version_compatible'
+function FingerprintCheckRow({ label, expected, actual, mode, screenWidth = 0, screenHeight = 0 }: { label: string; expected?: unknown; actual: unknown; mode?: FingerprintMatchMode; screenWidth?: number; screenHeight?: number }) {
+  const status = mode === 'window' ? matchWindowStatus(expected, actual, screenWidth, screenHeight) : matchStatus(expected, actual, mode)
+  const statusText = status === 'match' ? '一致' : status === 'version_compatible' ? '口径匹配' : status === 'screen_fit' ? '已贴合屏幕' : status === 'mismatch' ? '不一致' : status === 'not_configured' ? '未设期望' : '观察值'
+  const statusClass = status === 'match' || status === 'version_compatible' || status === 'screen_fit'
     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
     : status === 'mismatch'
       ? 'bg-amber-50 text-amber-700 border-amber-200'
@@ -292,13 +303,15 @@ export function BrowserEditPage() {
 
       if (isCreate) {
         const resolved = resolvePoolProxySelection('', '', proxyList)
+        const host = mergeHostFingerprintPreset(await fetchHostFingerprintPreset())
+        const deviceArgs = serialize(buildCurrentDeviceFingerprintConfig(host))
         setProxyMode('pool')
         setFormData((prev) => ({
           ...prev,
           proxyId: resolved.proxyId || directProxyID,
           proxyConfig: '',
           restoreLastSession: '',
-          fingerprintArgs: withAdaptiveDefaultWindowSize(settings.defaultFingerprintArgs || []),
+          fingerprintArgs: deviceArgs.length ? deviceArgs : withAdaptiveDefaultWindowSize(settings.defaultFingerprintArgs || []),
         }))
         setLaunchArgsText(resolvedDefaultLaunchArgs.join('\n'))
         return
@@ -851,10 +864,10 @@ export function BrowserEditPage() {
               <FingerprintDisplayRow label="颜色深度" actual={fingerprintCheckResult.runtime.colorDepth} />
               <FingerprintDisplayRow label="触控点" actual={fingerprintCheckResult.runtime.maxTouchPoints} />
               <FingerprintDisplayRow label="Do Not Track" actual={fingerprintCheckResult.runtime.doNotTrack} />
-              <FingerprintCheckRow label="窗口大小" expected={fingerprintCheckResult.expected.windowSize} actual={`${fingerprintCheckResult.runtime.outerWidth},${fingerprintCheckResult.runtime.outerHeight}`} />
+              <FingerprintCheckRow label="窗口大小" expected={fingerprintCheckResult.expected.windowSize} actual={`${fingerprintCheckResult.runtime.outerWidth},${fingerprintCheckResult.runtime.outerHeight}`} mode="window" screenWidth={fingerprintCheckResult.runtime.availWidth || fingerprintCheckResult.runtime.screenWidth} screenHeight={fingerprintCheckResult.runtime.availHeight || fingerprintCheckResult.runtime.screenHeight} />
               <FingerprintCheckRow label="平台" expected={fingerprintCheckResult.expected.platform} actual={fingerprintCheckResult.runtime.platform} mode="platform" />
-              <FingerprintCheckRow label="品牌版本" expected={fingerprintCheckResult.expected.brandVersion} actual={fingerprintCheckResult.runtime.userAgent} mode="browser-version" />
-              <FingerprintCheckRow label="系统版本" expected={fingerprintCheckResult.expected.platformVersion} actual={fingerprintCheckResult.runtime.userAgent} mode="platform-version" />
+              <FingerprintCheckRow label="品牌版本" expected={fingerprintCheckResult.expected.brandVersion} actual={[fingerprintCheckResult.runtime.uaFullVersion, fingerprintCheckResult.runtime.userAgent, fingerprintCheckResult.runtime.userAgentData].filter(Boolean).join(' ')} mode="browser-version" />
+              <FingerprintCheckRow label="系统版本" expected={fingerprintCheckResult.expected.platformVersion} actual={[fingerprintCheckResult.runtime.platformVersion, fingerprintCheckResult.runtime.userAgent, fingerprintCheckResult.runtime.userAgentData].filter(Boolean).join(' ')} mode="platform-version" />
               <FingerprintCheckRow label="UA" expected={fingerprintCheckResult.expected.brand} actual={fingerprintCheckResult.runtime.userAgent} mode="contains" />
               <FingerprintDisplayRow label="UA Data" actual={fingerprintCheckResult.runtime.userAgentData} />
               <FingerprintCheckRow label="Webdriver" expected={false} actual={fingerprintCheckResult.runtime.webdriver} />

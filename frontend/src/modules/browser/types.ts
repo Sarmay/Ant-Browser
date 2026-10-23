@@ -58,6 +58,10 @@ export interface BrowserFingerprintRuntimeInfo {
   platform: string
   userAgent: string
   userAgentData: string
+  platformVersion?: string
+  uaFullVersion?: string
+  availWidth?: number
+  availHeight?: number
   webdriver: boolean
   screenWidth: number
   screenHeight: number

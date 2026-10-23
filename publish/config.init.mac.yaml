@@ -38,7 +38,7 @@ browser:
   user_data_root: data
   default_fingerprint_args:
     - --fingerprint-brand=Chrome
-    - --fingerprint-platform=mac
+    - --fingerprint-platform=macos
   default_launch_args:
     - --disable-sync
     - --no-first-run

@@ -262,6 +262,10 @@ export function BrowserGetCookies(arg1) {
   return window['go']['main']['App']['BrowserGetCookies'](arg1);
 }
 
+export function BrowserHostFingerprintPreset() {
+  return window['go']['main']['App']['BrowserHostFingerprintPreset']();
+}
+
 export function BrowserImportCookies(arg1, arg2) {
   return window['go']['main']['App']['BrowserImportCookies'](arg1, arg2);
 }

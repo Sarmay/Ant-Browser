@@ -140,6 +140,8 @@ export function BrowserGetAllTags():Promise<Array<string>>;
 
 export function BrowserGetCookies(arg1:string):Promise<Array<backend.CookieInfo>>;
 
+export function BrowserHostFingerprintPreset():Promise<backend.HostFingerprintPreset>;
+
 export function BrowserImportCookies(arg1:string,arg2:Array<backend.CookieInfo>):Promise<number>;
 
 export function BrowserInstanceGetTabs(arg1:string):Promise<Array<browser.Tab>>;

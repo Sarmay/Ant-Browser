@@ -322,7 +322,7 @@ func defaultFingerprintArgsForOS(goos string) []string {
 	platform := "windows"
 	switch strings.ToLower(strings.TrimSpace(goos)) {
 	case "darwin":
-		platform = "mac"
+		platform = "macos"
 	case "linux":
 		platform = "linux"
 	}

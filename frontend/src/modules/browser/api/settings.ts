@@ -1,5 +1,16 @@
+import type { HostFingerprintPreset } from '../utils/fingerprintSerializer'
 import type { BrowserSettings } from '../types'
 import { createDefaultBrowserSettings, getBindings } from './runtime'
+
+export async function fetchHostFingerprintPreset(): Promise<HostFingerprintPreset | null> {
+  const bindings: any = await getBindings()
+  if (!bindings?.BrowserHostFingerprintPreset) return null
+  try {
+    return (await bindings.BrowserHostFingerprintPreset()) || null
+  } catch {
+    return null
+  }
+}
 
 export async function fetchBrowserSettings(): Promise<BrowserSettings> {
   const bindings: any = await getBindings()

@@ -1196,11 +1196,42 @@ function resolveIPAttribution(ip, results) {
     latencyMs: latency
   };
 }
+function withTimeout(promise, ms) {
+  return new Promise(function (resolve) {
+    var done = false;
+    var timer = setTimeout(function () {
+      if (done) return;
+      done = true;
+      resolve(null);
+    }, ms);
+    Promise.resolve(promise).then(function (value) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(value);
+    }, function () {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(null);
+    });
+  });
+}
+async function readHighEntropyValues() {
+  if (!navigator.userAgentData || !navigator.userAgentData.getHighEntropyValues) return null;
+  return await withTimeout(navigator.userAgentData.getHighEntropyValues(['architecture', 'bitness', 'model', 'platformVersion', 'uaFullVersion', 'fullVersionList', 'wow64']), 1500);
+}
 async function collect() {
+  var uaHigh = await readHighEntropyValues();
   var uaData = navigator.userAgentData ? {
     brands: navigator.userAgentData.brands || [],
     mobile: navigator.userAgentData.mobile,
-    platform: navigator.userAgentData.platform || ''
+    platform: navigator.userAgentData.platform || '',
+    platformVersion: uaHigh && uaHigh.platformVersion || '',
+    uaFullVersion: uaHigh && uaHigh.uaFullVersion || '',
+    architecture: uaHigh && uaHigh.architecture || '',
+    bitness: uaHigh && uaHigh.bitness || '',
+    fullVersionList: uaHigh && uaHigh.fullVersionList || []
   } : null;
   var fonts = fontProbe();
   var gl = webglInfo();
@@ -1214,6 +1245,7 @@ async function collect() {
       userAgent: navigator.userAgent || '',
       platform: navigator.platform || '',
       userAgentData: uaData,
+      userAgentDataHigh: uaHigh,
       webdriver: navigator.webdriver === true
     },
     locale: {
@@ -1357,6 +1389,22 @@ function normalizePlatformForCompare(value) {
   if (normalized.indexOf('linux') === 0 || normalized === 'x11') return 'linux';
   if (normalized === 'mac' || normalized === 'macos' || normalized.indexOf('mac') >= 0) return 'macos';
   return normalized;
+}
+function compareWindowSizeStatus(expected, actual, screenInfo) {
+  if (!hasExpected(expected)) return 'unknown';
+  if (String(expected) === String(actual)) return 'match';
+  var expectedParts = String(expected).split(',');
+  var actualParts = String(actual).split(',');
+  var expectedWidth = parseInt(expectedParts[0], 10);
+  var expectedHeight = parseInt(expectedParts[1], 10);
+  var actualWidth = parseInt(actualParts[0], 10);
+  var actualHeight = parseInt(actualParts[1], 10);
+  var screenWidth = screenInfo ? (screenInfo.availWidth || screenInfo.width || 0) : 0;
+  var screenHeight = screenInfo ? (screenInfo.availHeight || screenInfo.height || 0) : 0;
+  if (expectedWidth > 0 && expectedHeight > 0 && actualWidth > 0 && actualHeight > 0 && screenWidth > 0 && screenHeight > 0 && expectedWidth >= screenWidth && expectedHeight >= screenHeight && Math.abs(actualWidth - screenWidth) <= 16 && Math.abs(actualHeight - screenHeight) <= 16) {
+    return 'compatible';
+  }
+  return 'mismatch';
 }
 function comparePlatformStatus(expected, actual) {
   if (!hasExpected(expected)) return 'unknown';
@@ -1540,7 +1588,9 @@ function resetFingerprintBaseline(context) {
 function buildFingerprintRows(report, context) {
   loadFingerprintBaseline(context);
   var expected = context && context.expected ? context.expected : {};
-  var uaVersion = report.identity.userAgent + (report.identity.userAgentData ? ' / ' + JSON.stringify(report.identity.userAgentData) : '');
+  var high = report.identity.userAgentDataHigh || {};
+  var uaVersion = [high.platformVersion || '', report.identity.userAgent || '', report.identity.userAgentData ? JSON.stringify(report.identity.userAgentData) : ''].filter(Boolean).join(' / ');
+  var brandVersionActual = [high.uaFullVersion || '', report.identity.userAgent || '', high.fullVersionList ? JSON.stringify(high.fullVersionList) : ''].filter(Boolean).join(' / ');
   var rows = [];
   rows.push(fingerprintRow('Fingerprint Seed', expected.seed, 'JS unreadable', expected.seed ? 'unreadable' : 'unknown', 'Seed is a launch parameter and cannot be read back from page JS'));
   rows.push(fingerprintRow('Native Exposure Disabled', expected.disableSpoofing, 'JS unreadable', expected.disableSpoofing ? 'unreadable' : 'unknown', 'This is a launch protection policy and cannot be read back from page JS'));
@@ -1551,10 +1601,10 @@ function buildFingerprintRows(report, context) {
   rows.push(observedFingerprintRow('Device Memory', context, 'deviceMemory', expected.deviceMemory, report.hardware.deviceMemory, compareExactStatus, 'Compare navigator.deviceMemory'));
   rows.push(observedFingerprintRow('Touch Points', context, 'maxTouchPoints', expected.touchPoints, report.hardware.maxTouchPoints, compareExactStatus, 'Compare navigator.maxTouchPoints'));
   rows.push(observedFingerprintRow('Do Not Track', context, 'doNotTrack', expected.doNotTrack, report.hardware.doNotTrack, compareExactStatus, 'Compare navigator.doNotTrack'));
-  rows.push(observedFingerprintRow('Window Size', context, 'windowSize', expected.windowSize, report.screen.outerWidth + ',' + report.screen.outerHeight, compareExactStatus, 'Compare window.outerWidth/outerHeight'));
+  rows.push(observedFingerprintRow('Window Size', context, 'windowSize', expected.windowSize, report.screen.outerWidth + ',' + report.screen.outerHeight, function (expectedValue, actualValue) { return compareWindowSizeStatus(expectedValue, actualValue, report.screen); }, 'Compare window.outerWidth/outerHeight; a requested size larger than the screen matches when the window fills the available screen'));
   rows.push(observedFingerprintRow('Color Depth', context, 'colorDepth', expected.colorDepth, report.screen.colorDepth, compareExactStatus, 'Compare screen.colorDepth'));
   rows.push(fingerprintRow('Brand', expected.brand, report.identity.userAgent, compareContainsStatus(expected.brand, report.identity.userAgent), 'Compare whether User-Agent contains expected brand'));
-  rows.push(observedFingerprintRow('Brand Version', context, 'brandVersion', expected.brandVersion, report.identity.userAgent, compareBrowserVersionStatus, 'Prefer full browser version comparison; if User-Agent exposes only major version, compare by major version'));
+  rows.push(observedFingerprintRow('Brand Version', context, 'brandVersion', expected.brandVersion, brandVersionActual || report.identity.userAgent, compareBrowserVersionStatus, 'Prefer full browser version comparison; if User-Agent exposes only major version, compare by major version'));
   rows.push(fingerprintRow('Platform', expected.platform, report.identity.platform, comparePlatformStatus(expected.platform, report.identity.platform), 'Compare navigator.platform'));
   rows.push(observedFingerprintRow('Platform Version', context, 'platformVersion', expected.platformVersion, uaVersion, comparePlatformVersionStatus, 'Prefer full platform version comparison; if User-Agent / UA-CH exposes short version only, compare visible prefix'));
   rows.push(fingerprintRow('Webdriver', 'false', report.identity.webdriver ? 'true' : 'false', report.identity.webdriver ? 'mismatch' : 'match', 'Expected navigator.webdriver not to expose automation', 'Built-in Expected'));
