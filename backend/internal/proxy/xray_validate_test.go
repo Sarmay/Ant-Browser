@@ -132,6 +132,34 @@ func TestBuildDirectProxyBridgeOutboundAuthenticatedSocks5(t *testing.T) {
 	}
 }
 
+func TestRewriteHostProcessProxyURLUsesLoopback(t *testing.T) {
+	raw := "http://1024proxy.rabc1234:secret@host.docker.internal:2260"
+	got := RewriteHostProcessProxyURL(raw)
+	if got != "http://1024proxy.rabc1234:secret@127.0.0.1:2260" {
+		t.Fatalf("rewritten proxy = %s", got)
+	}
+	if RewriteHostProcessProxyURL("http://user:pass@proxy.example.com:8080") != "http://user:pass@proxy.example.com:8080" {
+		t.Fatal("remote proxy should stay unchanged")
+	}
+	if RewriteHostProcessProxyURL("direct://") != "direct://" {
+		t.Fatal("direct proxy should stay unchanged")
+	}
+
+	outbound, ok, err := buildDirectProxyBridgeOutbound("http://1024proxy.rabc1234:akak@gateway.docker.internal:2260")
+	if err != nil || !ok {
+		t.Fatalf("bridge outbound failed: ok=%v err=%v", ok, err)
+	}
+	settings := outbound["settings"].(map[string]interface{})
+	server := settings["servers"].([]interface{})[0].(map[string]interface{})
+	if server["address"] != "127.0.0.1" || server["port"] != 2260 {
+		t.Fatalf("bridge dial target = %+v", server)
+	}
+	user := server["users"].([]interface{})[0].(map[string]interface{})
+	if user["user"] != "1024proxy.rabc1234" || user["pass"] != "akak" {
+		t.Fatalf("credentials changed: %+v", user)
+	}
+}
+
 func TestBuildDirectProxyBridgeOutboundAuthenticatedHTTP(t *testing.T) {
 	outbound, ok, err := buildDirectProxyBridgeOutbound("http://user:pass@127.0.0.1:8080")
 	if err != nil {

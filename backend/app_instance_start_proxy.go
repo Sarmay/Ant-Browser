@@ -50,6 +50,8 @@ func (a *App) resolveBrowserStartProxy(input browserStartInput, profile *Browser
 		}
 	}
 
+	resolvedProxyConfig = proxy.RewriteHostProcessProxyURL(resolvedProxyConfig)
+
 	log.Info("代理配置检查",
 		logger.F("profile_id", profileID),
 		logger.F("proxy_id", profile.ProxyId),

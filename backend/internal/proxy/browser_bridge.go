@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -68,7 +69,7 @@ func parseDirectProxyBridgeSpec(src string) (*directProxyBridgeSpec, error) {
 		if username == "" {
 			return nil, nil
 		}
-		server := strings.TrimSpace(parsed.Hostname())
+		server := rewriteHostProcessProxyHost(parsed.Hostname())
 		if server == "" {
 			return nil, fmt.Errorf("代理地址缺少主机名")
 		}
@@ -86,5 +87,44 @@ func parseDirectProxyBridgeSpec(src string) (*directProxyBridgeSpec, error) {
 		}, nil
 	default:
 		return nil, nil
+	}
+}
+
+// RewriteHostProcessProxyURL 把容器里才该使用的主机别名改回本机回环。
+// Ant Browser 跑在宿主机上。host.docker.internal 在 macOS 上常被 TUN 解析成
+// 198.18.0.0/15 假 IP，连上去时代理握手会被直接断开，浏览器就无法上网。
+// 发布在宿主机上的 Resin 端口要通过 127.0.0.1 访问。
+func RewriteHostProcessProxyURL(src string) string {
+	raw := strings.TrimSpace(src)
+	if raw == "" || strings.EqualFold(raw, "direct://") {
+		return raw
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	host := rewriteHostProcessProxyHost(parsed.Hostname())
+	if host == "" || strings.EqualFold(host, parsed.Hostname()) {
+		return raw
+	}
+	port := parsed.Port()
+	replacement := host
+	if port != "" {
+		replacement = net.JoinHostPort(host, port)
+	}
+	hostPort := parsed.Host
+	idx := strings.LastIndex(raw, hostPort)
+	if idx < 0 || hostPort == "" {
+		return raw
+	}
+	return raw[:idx] + replacement + raw[idx+len(hostPort):]
+}
+
+func rewriteHostProcessProxyHost(host string) string {
+	switch strings.ToLower(strings.TrimSpace(host)) {
+	case "host.docker.internal", "gateway.docker.internal":
+		return "127.0.0.1"
+	default:
+		return strings.TrimSpace(host)
 	}
 }
